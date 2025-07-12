@@ -375,7 +375,34 @@ def test_sftp_connection(sftp_host, sftp_user, sftp_password, sftp_port=22, time
                 pass
 
 def auto_update_from_ftp():
-    """Función para actualización automática desde FTP"""
+    """Función para actualización automática desde FTP/SFTP"""
+    # Priorizar SFTP si está configurado
+    if 'sftp_config' in st.session_state and 'auto_ftp_enabled' in st.session_state:
+        config = st.session_state.sftp_config
+        password = st.session_state.get('sftp_password', '@Q&jb@kpcU(OhpQv95bN0%eI')
+        
+        if all([config['host'], config['user'], config['file_path'], password]):
+            try:
+                success, result = download_from_sftp(
+                    config['host'], 
+                    config['user'], 
+                    password, 
+                    config['file_path'], 
+                    config['port'],
+                    config.get('timeout', 30)
+                )
+                
+                if success:
+                    is_valid, csv_result = validate_csv_content(result)
+                    if is_valid:
+                        if save_data(csv_result):
+                            st.session_state['last_auto_update'] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                            return True
+                return False
+            except:
+                return False
+    
+    # Fallback a FTP si SFTP no está configurado
     if 'ftp_config' in st.session_state and 'auto_ftp_enabled' in st.session_state:
         config = st.session_state.ftp_config
         password = st.session_state.get('ftp_password', '')
@@ -566,6 +593,16 @@ def main():
                     'file_path': ''
                 }
             
+            # Inicializar configuración SFTP en session state  
+            if 'sftp_config' not in st.session_state:
+                st.session_state.sftp_config = {
+                    'host': 'home567855122.1and1-data.host',
+                    'port': 22,
+                    'user': 'acc1195143440',
+                    'file_path': '/stock/stock.csv',
+                    'timeout': 30
+                }
+            
             with st.form("ftp_form"):
                 ftp_host = st.text_input(
                     "Servidor FTP:", 
@@ -721,15 +758,23 @@ def main():
             
             with col2:
                 if st.button("🔄 Actualizar Ahora", help="Ejecutar actualización inmediata"):
-                    if 'ftp_config' in st.session_state and st.session_state.get('ftp_password'):
-                        with st.spinner("Actualizando desde FTP..."):
+                    # Priorizar SFTP si está configurado
+                    if 'sftp_config' in st.session_state and st.session_state.get('sftp_password'):
+                        with st.spinner("Actualizando desde SFTP..."):
                             if auto_update_from_ftp():
-                                st.success("✅ Actualización automática completada")
+                                st.success("✅ Actualización automática desde SFTP completada")
                                 st.rerun()
                             else:
-                                st.error("❌ Error en la actualización automática")
+                                st.error("❌ Error en la actualización automática desde SFTP")
+                    elif 'ftp_config' in st.session_state and st.session_state.get('ftp_password'):
+                        with st.spinner("Actualizando desde FTP..."):
+                            if auto_update_from_ftp():
+                                st.success("✅ Actualización automática desde FTP completada")
+                                st.rerun()
+                            else:
+                                st.error("❌ Error en la actualización automática desde FTP")
                     else:
-                        st.error("❌ Configure primero los datos de FTP")
+                        st.error("❌ Configure primero los datos de FTP o SFTP")
             
             # Guardar estado de configuración automática
             if auto_enabled != st.session_state.auto_ftp_enabled:
@@ -780,13 +825,36 @@ def main():
         with tab3:
             st.markdown("**Configuración del Servidor SFTP (SSH):**")
             st.success("✅ SFTP detectado - Esta es la configuración correcta para tu servidor")
+            st.info("🔧 Configuración preestablecida - Los datos ya están configurados para tu servidor")
             
             with st.form("sftp_form"):
-                sftp_host = st.text_input("Servidor SFTP:", placeholder="sftp.ejemplo.com")
-                sftp_port = st.number_input("Puerto SSH:", value=22, min_value=1, max_value=65535)
-                sftp_user = st.text_input("Usuario SSH:", placeholder="usuario")
-                sftp_password = st.text_input("Contraseña SSH:", type="password")
-                sftp_file_path = st.text_input("Ruta del archivo:", placeholder="/home/usuario/datos/productos.csv")
+                sftp_host = st.text_input(
+                    "Servidor SFTP:", 
+                    value=st.session_state.sftp_config['host'],
+                    placeholder="sftp.ejemplo.com"
+                )
+                sftp_port = st.number_input(
+                    "Puerto SSH:", 
+                    value=st.session_state.sftp_config['port'], 
+                    min_value=1, 
+                    max_value=65535
+                )
+                sftp_user = st.text_input(
+                    "Usuario SSH:", 
+                    value=st.session_state.sftp_config['user'],
+                    placeholder="usuario"
+                )
+                sftp_password = st.text_input(
+                    "Contraseña SSH:", 
+                    type="password",
+                    value="@Q&jb@kpcU(OhpQv95bN0%eI",
+                    help="Contraseña preconfigurada para el servidor"
+                )
+                sftp_file_path = st.text_input(
+                    "Ruta del archivo:", 
+                    value=st.session_state.sftp_config['file_path'],
+                    placeholder="/home/usuario/datos/productos.csv"
+                )
                 
                 sftp_timeout = st.slider("Timeout (segundos):", min_value=5, max_value=60, value=30)
                 
