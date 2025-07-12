@@ -1,1 +1,11 @@
 Codigo,Descripcion,Familia,Stock
+P001,Tornillo Phillips 3x20mm,Ferreteria,150
+P002,Tuerca Hexagonal M6,Ferreteria,75
+P003,Arandela Plana 6mm,Ferreteria,200
+P004,Cable Electrico 2.5mm,Electricidad,45
+P005,Interruptor Simple,Electricidad,25
+P006,Enchufe Doble,Electricidad,12
+P007,Pintura Blanca 1L,Pintura,8
+P008,Rodillo 23cm,Pintura,15
+P009,Brocha 2 pulgadas,Pintura,22
+P010,Destornillador Phillips,Herramientas,18

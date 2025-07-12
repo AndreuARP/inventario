@@ -3,6 +3,9 @@ import pandas as pd
 import os
 from io import StringIO
 import csv
+import ftplib
+from datetime import datetime
+from datetime import datetime
 
 # Configuración de la página
 st.set_page_config(
@@ -76,6 +79,31 @@ def save_data(df):
     except Exception as e:
         st.error(f"❌ Error al guardar los datos: {str(e)}")
         return False
+
+def download_from_ftp(ftp_host, ftp_user, ftp_password, ftp_file_path, ftp_port=21):
+    """Descargar archivo CSV desde servidor FTP"""
+    try:
+        # Conectar al servidor FTP
+        ftp = ftplib.FTP()
+        ftp.connect(ftp_host, ftp_port)
+        ftp.login(ftp_user, ftp_password)
+        
+        # Descargar el archivo
+        csv_content = []
+        ftp.retrlines(f'RETR {ftp_file_path}', csv_content.append)
+        
+        # Cerrar conexión
+        ftp.quit()
+        
+        # Unir las líneas del archivo
+        csv_string = '\n'.join(csv_content)
+        
+        return True, csv_string
+        
+    except ftplib.all_errors as e:
+        return False, f"Error de FTP: {str(e)}"
+    except Exception as e:
+        return False, f"Error general: {str(e)}"
 
 def validate_csv_content(content):
     """Validar el contenido del archivo CSV"""
@@ -159,28 +187,123 @@ def main():
         
         # Sección de carga de archivos
         st.subheader("📂 Actualizar Datos")
-        uploaded_file = st.file_uploader(
-            "Cargar archivo CSV:",
-            type=['csv'],
-            help="El archivo debe contener las columnas: Codigo, Descripcion, Familia, Stock"
-        )
         
-        if uploaded_file is not None:
-            # Leer contenido del archivo
-            content = uploaded_file.read().decode('utf-8')
+        # Tabs para diferentes métodos de carga
+        tab1, tab2 = st.tabs(["📁 Archivo Local", "🌐 Servidor FTP"])
+        
+        with tab1:
+            uploaded_file = st.file_uploader(
+                "Cargar archivo CSV:",
+                type=['csv'],
+                help="El archivo debe contener las columnas: Codigo, Descripcion, Familia, Stock"
+            )
             
-            # Validar contenido
-            is_valid, result = validate_csv_content(content)
-            
-            if is_valid:
-                st.success("✅ Archivo válido")
+            if uploaded_file is not None:
+                # Leer contenido del archivo
+                content = uploaded_file.read().decode('utf-8')
                 
-                if st.button("💾 Actualizar Base de Datos", type="primary"):
-                    if save_data(result):
-                        st.success("🎉 ¡Datos actualizados exitosamente!")
-                        st.rerun()
-            else:
-                st.error(f"❌ {result}")
+                # Validar contenido
+                is_valid, result = validate_csv_content(content)
+                
+                if is_valid:
+                    st.success("✅ Archivo válido")
+                    
+                    if st.button("💾 Actualizar Base de Datos", type="primary", key="local_update"):
+                        if save_data(result):
+                            st.success("🎉 ¡Datos actualizados exitosamente!")
+                            st.rerun()
+                else:
+                    st.error(f"❌ {result}")
+        
+        with tab2:
+            st.markdown("**Configuración del Servidor FTP:**")
+            
+            # Inicializar configuración FTP en session state
+            if 'ftp_config' not in st.session_state:
+                st.session_state.ftp_config = {
+                    'host': '',
+                    'port': 21,
+                    'user': '',
+                    'file_path': ''
+                }
+            
+            with st.form("ftp_form"):
+                ftp_host = st.text_input(
+                    "Servidor FTP:", 
+                    value=st.session_state.ftp_config['host'],
+                    placeholder="ftp.ejemplo.com"
+                )
+                ftp_port = st.number_input(
+                    "Puerto:", 
+                    value=st.session_state.ftp_config['port'], 
+                    min_value=1, 
+                    max_value=65535
+                )
+                ftp_user = st.text_input(
+                    "Usuario:", 
+                    value=st.session_state.ftp_config['user'],
+                    placeholder="usuario"
+                )
+                ftp_password = st.text_input("Contraseña:", type="password")
+                ftp_file_path = st.text_input(
+                    "Ruta del archivo:", 
+                    value=st.session_state.ftp_config['file_path'],
+                    placeholder="/data/productos.csv"
+                )
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    save_config = st.form_submit_button("💾 Guardar Configuración")
+                with col2:
+                    download_ftp = st.form_submit_button("🔄 Descargar desde FTP", type="primary")
+                
+                if save_config:
+                    st.session_state.ftp_config = {
+                        'host': ftp_host,
+                        'port': ftp_port,
+                        'user': ftp_user,
+                        'file_path': ftp_file_path
+                    }
+                    st.success("✅ Configuración FTP guardada")
+                    st.rerun()
+                
+                if download_ftp:
+                    if all([ftp_host, ftp_user, ftp_password, ftp_file_path]):
+                        # Guardar configuración automáticamente al descargar
+                        st.session_state.ftp_config = {
+                            'host': ftp_host,
+                            'port': ftp_port,
+                            'user': ftp_user,
+                            'file_path': ftp_file_path
+                        }
+                        
+                        with st.spinner("Conectando al servidor FTP..."):
+                            success, result = download_from_ftp(ftp_host, ftp_user, ftp_password, ftp_file_path, ftp_port)
+                            
+                            if success:
+                                # Validar contenido descargado
+                                is_valid, csv_result = validate_csv_content(result)
+                                
+                                if is_valid:
+                                    st.success("✅ Archivo descargado y validado correctamente")
+                                    st.info(f"📊 Se encontraron {len(csv_result)} productos")
+                                    
+                                    if st.button("💾 Actualizar Base de Datos", type="primary", key="ftp_update"):
+                                        if save_data(csv_result):
+                                            st.success("🎉 ¡Datos actualizados desde FTP exitosamente!")
+                                            st.rerun()
+                                else:
+                                    st.error(f"❌ Error en el archivo descargado: {csv_result}")
+                            else:
+                                st.error(f"❌ {result}")
+                    else:
+                        st.error("❌ Por favor complete todos los campos")
+            
+            # Mostrar información de última actualización
+            if os.path.exists(CSV_FILE_PATH):
+                mod_time = os.path.getmtime(CSV_FILE_PATH)
+                last_update = datetime.fromtimestamp(mod_time).strftime("%d/%m/%Y %H:%M:%S")
+                st.info(f"📅 Última actualización: {last_update}")
         
         st.markdown("---")
         

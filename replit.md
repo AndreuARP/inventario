@@ -38,6 +38,8 @@ Preferred communication style: Simple, everyday language.
 - CSV file-based data storage for simplicity
 - Pandas integration for data manipulation and analysis
 - File I/O operations using Python's built-in libraries
+- FTP integration for remote file downloads and automatic updates
+- Session-based configuration storage for FTP credentials
 
 ### User Interface
 - Page configuration with custom title, icon, and layout
@@ -60,7 +62,7 @@ Preferred communication style: Simple, everyday language.
 ### Core Dependencies
 - **Streamlit**: Web framework for the application interface
 - **Pandas**: Data manipulation and analysis
-- **Standard Library**: os, io, csv for file operations
+- **Standard Library**: os, io, csv, ftplib, datetime for file operations and FTP connectivity
 
 ### File Dependencies
 - `data/productos.csv`: Product inventory data file
