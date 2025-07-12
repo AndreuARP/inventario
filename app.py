@@ -502,480 +502,148 @@ def filter_dataframe(df, search_term):
     
     return df[mask]
 
-def is_mobile_view():
-    """Detectar si el usuario está en un dispositivo móvil"""
-    # En Streamlit, podemos usar los query params o crear un toggle
-    return st.session_state.get('mobile_view', False)
-
-def set_mobile_styles():
-    """Aplicar estilos CSS para vista móvil"""
-    mobile_css = """
-    <style>
-    /* Estilos base para vista móvil */
-    .compact-card {
-        background-color: #f8f9fa;
-        border-radius: 8px;
-        padding: 12px;
-        margin: 8px 0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        border-left: 4px solid #1f77b4;
-    }
-    
-    .compact-header {
-        font-weight: bold;
-        font-size: 0.9rem;
-        margin-bottom: 4px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    .compact-details {
-        font-size: 0.8rem;
-        color: #666;
-        line-height: 1.4;
-    }
-    
-    .stock-indicator {
-        font-size: 1.2rem;
-        margin-left: 8px;
-    }
-    
-    /* Responsive styles */
-    @media (max-width: 768px) {
-        .main .block-container {
-            padding-top: 1rem;
-            padding-left: 0.5rem;
-            padding-right: 0.5rem;
-        }
-        
-        .stDataFrame {
-            font-size: 0.8rem;
-        }
-        
-        div[data-testid="metric-container"] {
-            background-color: rgba(28, 131, 225, 0.1);
-            border: 1px solid rgba(28, 131, 225, 0.1);
-            border-radius: 0.5rem;
-            padding: 0.5rem;
-            margin: 0.2rem 0;
-        }
-        
-        /* Hide sidebar on mobile when in mobile view */
-        .css-1d391kg {
-            display: none;
-        }
-    }
-    </style>
-    """
-    st.markdown(mobile_css, unsafe_allow_html=True)
-
-def render_mobile_card(row):
-    """Renderizar una tarjeta compacta para vista móvil"""
-    stock_indicator = get_stock_color(row['Stock'])
-    
-    card_html = f"""
-    <div class="compact-card">
-        <div class="compact-header">
-            {row['Codigo']} <span class="stock-indicator">{stock_indicator}</span>
-        </div>
-        <div class="compact-details">
-            <strong>{row['Descripcion']}</strong><br>
-            Familia: {row['Familia']} | Stock: {row['Stock']} unidades
-        </div>
-    </div>
-    """
-    return card_html
-
-def display_mobile_results(df, search_term=""):
-    """Mostrar resultados en formato móvil compacto"""
-    if df.empty:
-        st.warning("🔍 No se encontraron productos que coincidan con la búsqueda.")
-        return
-    
-    # Información de resultados en formato compacto
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("📊 Encontrados", len(df))
-    with col2:
-        # Botón de exportar compacto
-        csv_export = df.to_csv(index=False)
-        st.download_button(
-            label="📥 Exportar",
-            data=csv_export,
-            file_name=f"stock_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv"
-        )
-    
-    st.markdown("---")
-    
-    # Renderizar tarjetas
-    cards_html = ""
-    for _, row in df.iterrows():
-        cards_html += render_mobile_card(row)
-    
-    st.markdown(cards_html, unsafe_allow_html=True)
-    
-    # Leyenda compacta
-    st.markdown("""
-    **Stock:** 🟢 Alto (20+) | 🟡 Medio (6-20) | 🔴 Bajo (≤5)
-    """)
-
-def display_desktop_results(df, search_term=""):
-    """Mostrar resultados en formato de escritorio (tabla completa)"""
-    if df.empty:
-        st.warning("🔍 No se encontraron productos que coincidan con la búsqueda.")
-        return
-    
-    # Información de resultados
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("📊 Productos Encontrados", len(df))
-    with col2:
-        if search_term:
-            st.metric("📋 Total en Base", len(df))
-    with col3:
-        # Botón de exportar
-        csv_export = df.to_csv(index=False)
-        st.download_button(
-            label="📥 Exportar Resultados",
-            data=csv_export,
-            file_name=f"stock_productos_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv",
-            help="Descargar resultados en formato CSV"
-        )
-    
-    st.markdown("---")
-    
-    # Preparar datos para mostrar con indicadores de stock
-    display_df = df.copy()
-    display_df['Indicador'] = display_df['Stock'].apply(get_stock_color)
-    
-    # Reordenar columnas
-    display_df = display_df[['Indicador', 'Codigo', 'Descripcion', 'Familia', 'Stock']]
-    
-    # Configurar la tabla
-    st.dataframe(
-        display_df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Indicador": st.column_config.TextColumn(
-                "Estado",
-                help="🟢 Stock Alto | 🟡 Stock Medio | 🔴 Stock Bajo",
-                width="small"
-            ),
-            "Codigo": st.column_config.TextColumn(
-                "Código",
-                width="medium"
-            ),
-            "Descripcion": st.column_config.TextColumn(
-                "Descripción",
-                width="large"
-            ),
-            "Familia": st.column_config.TextColumn(
-                "Familia",
-                width="medium"
-            ),
-            "Stock": st.column_config.NumberColumn(
-                "Stock",
-                width="small",
-                format="%d"
-            )
-        }
-    )
-    
-    # Leyenda de colores
-    st.markdown("---")
-    st.markdown("""
-    **Leyenda de Stock:**
-    - 🟢 **Stock Alto:** Más de 20 unidades
-    - 🟡 **Stock Medio:** Entre 6 y 20 unidades  
-    - 🔴 **Stock Bajo:** 5 unidades o menos
-    """)
-
 def main():
     """Función principal de la aplicación"""
     # Verificar contraseña
     if not check_password():
         return
     
-    # Aplicar estilos móviles
-    set_mobile_styles()
-    
-    # Toggle para vista móvil en la parte superior
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col1:
-        st.title("📦 Sistema de Consulta de Stock")
-    with col3:
-        mobile_toggle = st.toggle("📱 Vista Móvil", value=is_mobile_view())
-        if mobile_toggle != st.session_state.get('mobile_view', False):
-            st.session_state.mobile_view = mobile_toggle
-            st.rerun()
-    
+    # Título principal
+    st.title("📦 Sistema de Consulta de Stock")
     st.markdown("---")
     
-    # Configuración de actualización automática (fuera de formularios)
-    with st.expander("🔄 Configuración de Actualización Automática", expanded=False):
-        # Inicializar configuración automática (activada por defecto para SFTP)
-        if 'auto_ftp_enabled' not in st.session_state:
-            # Activar automáticamente si tenemos configuración SFTP
-            has_sftp_config = (
-                'sftp_config' in st.session_state and 
-                st.session_state.sftp_config.get('host') == 'home567855122.1and1-data.host'
-            )
-            st.session_state.auto_ftp_enabled = has_sftp_config
+    # Sidebar para carga de archivos
+    with st.sidebar:
+        st.header("🔧 Administración")
         
-        # Mostrar mensaje si está habilitado por defecto
-        if st.session_state.auto_ftp_enabled and 'sftp_config' in st.session_state:
-            st.success("🌙 Actualización nocturna automática activada con tu configuración SFTP")
+        # Botón de cerrar sesión
+        if st.button("🚪 Cerrar Sesión", type="secondary"):
+            st.session_state.password_correct = False
+            st.rerun()
         
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            auto_enabled = st.checkbox(
-                "Activar actualización automática diaria (2:00 AM)",
-                value=st.session_state.auto_ftp_enabled,
-                help="Descarga automáticamente el archivo desde SFTP todas las noches"
-            )
-        
-        with col2:
-            if st.button("🔄 Actualizar Ahora", help="Ejecutar actualización inmediata"):
-                # Priorizar SFTP si está configurado
-                if 'sftp_config' in st.session_state and st.session_state.get('sftp_password'):
-                    with st.spinner("Actualizando desde SFTP..."):
-                        if auto_update_from_ftp():
-                            st.success("✅ Actualización automática desde SFTP completada")
-                            st.rerun()
-                        else:
-                            st.error("❌ Error en la actualización automática desde SFTP")
-                elif 'ftp_config' in st.session_state and st.session_state.get('ftp_password'):
-                    with st.spinner("Actualizando desde FTP..."):
-                        if auto_update_from_ftp():
-                            st.success("✅ Actualización automática desde FTP completada")
-                            st.rerun()
-                        else:
-                            st.error("❌ Error en la actualización automática desde FTP")
-                else:
-                    st.error("❌ Configure primero los datos de FTP o SFTP")
-        
-        # Guardar estado de configuración automática
-        if auto_enabled != st.session_state.auto_ftp_enabled:
-            st.session_state.auto_ftp_enabled = auto_enabled
-            if auto_enabled:
-                # Verificar si tenemos configuración SFTP
-                if 'sftp_config' in st.session_state and st.session_state.sftp_config.get('host'):
-                    # Configurar actualización automática para las 2:00 AM
-                    schedule.clear()
-                    schedule.every().day.at("02:00").do(auto_update_from_ftp)
-                    st.success("✅ Actualización automática activada para las 2:00 AM (SFTP)")
-                    st.session_state.sftp_password = "@Q&jb@kpcU(OhpQv95bN0%eI"
-                elif 'ftp_config' in st.session_state:
-                    if not st.session_state.get('ftp_password'):
-                        st.warning("⚠️ Para la actualización automática, ingrese la contraseña FTP arriba")
-                    else:
-                        schedule.clear()
-                        schedule.every().day.at("02:00").do(auto_update_from_ftp)
-                        st.success("✅ Actualización automática activada para las 2:00 AM (FTP)")
-                else:
-                    st.warning("⚠️ Configure primero los datos de conexión")
-            elif not auto_enabled:
-                schedule.clear()
-                st.info("ℹ️ Actualización automática desactivada")
-        
-        # Configurar tiempo personalizado
-        if auto_enabled:
-            st.markdown("**Horario Personalizado:**")
-            col1, col2 = st.columns(2)
-            with col1:
-                update_hour = st.selectbox("Hora:", list(range(24)), index=2, help="Hora nocturna recomendada: 1-4 AM")
-            with col2:
-                update_minute = st.selectbox("Minuto:", [0, 15, 30, 45], index=0)
-            
-            if st.button("⏰ Cambiar Horario"):
-                schedule.clear()
-                time_str = f"{update_hour:02d}:{update_minute:02d}"
-                schedule.every().day.at(time_str).do(auto_update_from_ftp)
-                st.success(f"✅ Actualización programada para las {time_str} (horario nocturno)")
-                
-            next_run = schedule.next_run()
-            if next_run:
-                st.info(f"🌙 Próxima actualización nocturna: {next_run.strftime('%d/%m/%Y %H:%M:%S')}")
-        
-        # Mostrar información de última actualización
         st.markdown("---")
-        if os.path.exists(CSV_FILE_PATH):
-            mod_time = os.path.getmtime(CSV_FILE_PATH)
-            last_update = datetime.fromtimestamp(mod_time).strftime("%d/%m/%Y %H:%M:%S")
-            st.info(f"📅 Última actualización: {last_update}")
         
-        if 'last_auto_update' in st.session_state:
-            st.info(f"🤖 Última actualización automática: {st.session_state.last_auto_update}")
-
-    # Sidebar adaptativo para carga de archivos
-    if is_mobile_view():
-        # En vista móvil, mostrar administración en un expander
-        with st.expander("🔧 Administración y Configuración", expanded=False):
-            # Botón de cerrar sesión
-            if st.button("🚪 Cerrar Sesión", type="secondary"):
-                st.session_state.password_correct = False
-                st.rerun()
-            
-            st.markdown("---")
-            show_admin_content()
-    else:
-        # Vista escritorio: sidebar normal
-        with st.sidebar:
-            st.header("🔧 Administración")
-            
-            # Botón de cerrar sesión
-            if st.button("🚪 Cerrar Sesión", type="secondary"):
-                st.session_state.password_correct = False
-                st.rerun()
-            
-            st.markdown("---")
-            show_admin_content()
-
-    # Cargar y mostrar datos
-    df = load_data()
-    
-    # Búsqueda y visualización de resultados
-    search_term = st.text_input(
-        "🔍 Buscar productos:",
-        placeholder="Ingresa código, descripción o familia del producto...",
-        help="Busca en todas las columnas: Código, Descripción, Familia"
-    )
-    
-    # Filtrar datos
-    filtered_df = filter_dataframe(df, search_term)
-    
-    if is_mobile_view():
-        display_mobile_results(filtered_df, search_term)
-    else:
-        display_desktop_results(filtered_df, search_term)
-
-def show_admin_content():
-    """Mostrar contenido de administración (para reutilizar en sidebar y móvil)"""
-    # Sección de carga de archivos
-    st.subheader("📂 Actualizar Datos")
-    
-    # Tabs para diferentes métodos de carga
-    tab1, tab2, tab3, tab4 = st.tabs(["📁 Archivo Local", "🌐 Servidor FTP", "🔐 Servidor SFTP", "🔗 URL Directa"])
-    
-    with tab1:
-        uploaded_file = st.file_uploader(
-            "Cargar archivo CSV:",
-            type=['csv'],
-            help="El archivo debe contener las columnas: Codigo, Descripcion, Familia, Stock"
-        )
+        # Sección de carga de archivos
+        st.subheader("📂 Actualizar Datos")
         
-        if uploaded_file is not None:
-            # Leer contenido del archivo
-            content = uploaded_file.read().decode('utf-8')
+        # Tabs para diferentes métodos de carga
+        tab1, tab2, tab3, tab4 = st.tabs(["📁 Archivo Local", "🌐 Servidor FTP", "🔐 Servidor SFTP", "🔗 URL Directa"])
+        
+        with tab1:
+            uploaded_file = st.file_uploader(
+                "Cargar archivo CSV:",
+                type=['csv'],
+                help="El archivo debe contener las columnas: Codigo, Descripcion, Familia, Stock"
+            )
             
-            # Validar contenido
-            is_valid, result = validate_csv_content(content)
-            
-            if is_valid:
-                st.success("✅ Archivo válido")
+            if uploaded_file is not None:
+                # Leer contenido del archivo
+                content = uploaded_file.read().decode('utf-8')
                 
-                if st.button("💾 Actualizar Base de Datos", type="primary", key="local_update"):
-                    if save_data(result):
-                        st.success("🎉 ¡Datos actualizados exitosamente!")
-                        st.rerun()
-            else:
-                st.error(f"❌ {result}")
-    
-    with tab2:
-        st.markdown("**Configuración del Servidor FTP:**")
+                # Validar contenido
+                is_valid, result = validate_csv_content(content)
+                
+                if is_valid:
+                    st.success("✅ Archivo válido")
+                    
+                    if st.button("💾 Actualizar Base de Datos", type="primary", key="local_update"):
+                        if save_data(result):
+                            st.success("🎉 ¡Datos actualizados exitosamente!")
+                            st.rerun()
+                else:
+                    st.error(f"❌ {result}")
         
-        # Información de ayuda  
-        with st.expander("💡 Ayuda con Configuración FTP"):
-            st.markdown("""
-            **Ejemplos de configuración común:**
+        with tab2:
+            st.markdown("**Configuración del Servidor FTP:**")
             
-            - **Servidor FTP estándar:**
-              - Puerto: 21 (por defecto)
-              - Ruta archivo: `/ruta/completa/productos.csv`
+            # Información de ayuda
+            with st.expander("💡 Ayuda con Configuración FTP"):
+                st.markdown("""
+                **Ejemplos de configuración común:**
+                
+                - **Servidor FTP estándar:**
+                  - Puerto: 21 (por defecto)
+                  - Ruta archivo: `/ruta/completa/productos.csv`
+                
+                - **Servidor SFTP:**
+                  - Puerto: 22 (usar puerto SFTP si aplica)
+                  
+                - **Servidores de hosting:**
+                  - Host: `ftp.tudominio.com` o IP del servidor
+                  - Usuario: tu usuario FTP
+                  - Ruta: `/public_html/data/productos.csv`
+                
+                **Problemas comunes y soluciones:**
+                - ❌ "Connection refused": Revisar host y puerto
+                - ❌ "Authentication failed": Verificar usuario/contraseña
+                - ❌ "File not found": Confirmar ruta completa del archivo
+                - ❌ "Timeout": Probar modo activo/pasivo o usar URL directa
+                - ❌ "No se puede alcanzar": Firewall o red bloqueando conexión
+                
+                **💡 Alternativa recomendada:**
+                Si FTP sigue fallando, use la pestaña "URL Directa" que es más compatible con firewalls y redes empresariales.
+                """)
             
-            - **Servidor SFTP:**
-              - Puerto: 22 (usar puerto SFTP si aplica)
-              
-            - **Servidores de hosting:**
-              - Host: `ftp.tudominio.com` o IP del servidor
-              - Usuario: tu usuario FTP
-              - Ruta: `/public_html/data/productos.csv`
+            # Inicializar configuración FTP en session state
+            if 'ftp_config' not in st.session_state:
+                st.session_state.ftp_config = {
+                    'host': '',
+                    'port': 21,
+                    'user': '',
+                    'file_path': ''
+                }
             
-            **Problemas comunes y soluciones:**
-            - ❌ "Connection refused": Revisar host y puerto
-            - ❌ "Authentication failed": Verificar usuario/contraseña
-            - ❌ "File not found": Confirmar ruta completa del archivo
-            - ❌ "Timeout": Probar modo activo/pasivo o usar URL directa
-            - ❌ "No se puede alcanzar": Firewall o red bloqueando conexión
+            # Inicializar configuración SFTP en session state  
+            if 'sftp_config' not in st.session_state:
+                st.session_state.sftp_config = {
+                    'host': 'home567855122.1and1-data.host',
+                    'port': 22,
+                    'user': 'acc1195143440',
+                    'file_path': '/stock/stock.csv',
+                    'timeout': 30
+                }
             
-            **💡 Alternativa recomendada:**
-            Si FTP sigue fallando, use la pestaña "URL Directa" que es más compatible con firewalls y redes empresariales.
-            """)
-        
-        # Inicializar configuración FTP en session state
-        if 'ftp_config' not in st.session_state:
-            st.session_state.ftp_config = {
-                'host': '',
-                'port': 21,
-                'user': '',
-                'file_path': ''
-            }
-        
-        # Inicializar configuración SFTP en session state  
-        if 'sftp_config' not in st.session_state:
-            st.session_state.sftp_config = {
-                'host': 'home567855122.1and1-data.host',
-                'port': 22,
-                'user': 'acc1195143440',
-                'file_path': '/stock/stock.csv',
-                'timeout': 30
-            }
-        
-        with st.form("ftp_form"):
-            ftp_host = st.text_input(
-                "Servidor FTP:", 
-                value=st.session_state.ftp_config['host'],
-                placeholder="ftp.ejemplo.com"
-            )
-            ftp_port = st.number_input(
-                "Puerto:", 
-                value=st.session_state.ftp_config['port'], 
-                min_value=1, 
-                max_value=65535
-            )
-            ftp_user = st.text_input(
-                "Usuario:", 
-                value=st.session_state.ftp_config['user'],
-                placeholder="usuario"
-            )
-            ftp_password = st.text_input(
-                "Contraseña:", 
-                type="password",
-                help="La contraseña se guardará de forma segura para actualizaciones automáticas"
-            )
-            ftp_file_path = st.text_input(
-                "Ruta del archivo:", 
-                value=st.session_state.ftp_config['file_path'],
-                placeholder="/data/productos.csv"
-            )
-            
-            # Opciones avanzadas
-            with st.expander("⚙️ Configuración Avanzada"):
-                passive_mode = st.checkbox(
-                    "Modo Pasivo (recomendado para firewalls)", 
-                    value=True,
-                    help="El modo pasivo resuelve problemas de conexión en la mayoría de casos"
+            with st.form("ftp_form"):
+                ftp_host = st.text_input(
+                    "Servidor FTP:", 
+                    value=st.session_state.ftp_config['host'],
+                    placeholder="ftp.ejemplo.com"
                 )
-                connection_timeout = st.slider(
-                    "Timeout de conexión (segundos):", 
-                    min_value=5, 
-                    max_value=60, 
-                    value=30
+                ftp_port = st.number_input(
+                    "Puerto:", 
+                    value=st.session_state.ftp_config['port'], 
+                    min_value=1, 
+                    max_value=65535
                 )
+                ftp_user = st.text_input(
+                    "Usuario:", 
+                    value=st.session_state.ftp_config['user'],
+                    placeholder="usuario"
+                )
+                ftp_password = st.text_input(
+                    "Contraseña:", 
+                    type="password",
+                    help="La contraseña se guardará de forma segura para actualizaciones automáticas"
+                )
+                ftp_file_path = st.text_input(
+                    "Ruta del archivo:", 
+                    value=st.session_state.ftp_config['file_path'],
+                    placeholder="/data/productos.csv"
+                )
+                
+                # Opciones avanzadas
+                with st.expander("⚙️ Configuración Avanzada"):
+                    passive_mode = st.checkbox(
+                        "Modo Pasivo (recomendado para firewalls)", 
+                        value=True,
+                        help="El modo pasivo resuelve problemas de conexión en la mayoría de casos"
+                    )
+                    connection_timeout = st.slider(
+                        "Timeout de conexión (segundos):", 
+                        min_value=5, 
+                        max_value=60, 
+                        value=30
+                    )
                 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -1072,7 +740,119 @@ def show_admin_content():
                     else:
                         st.error("❌ Por favor complete todos los campos")
             
-
+            # Configuración de actualización automática
+            st.markdown("---")
+            st.markdown("**Actualización Automática:**")
+            
+            # Inicializar configuración automática (activada por defecto para SFTP)
+            if 'auto_ftp_enabled' not in st.session_state:
+                # Activar automáticamente si tenemos configuración SFTP
+                has_sftp_config = (
+                    'sftp_config' in st.session_state and 
+                    st.session_state.sftp_config.get('host') == 'home567855122.1and1-data.host'
+                )
+                st.session_state.auto_ftp_enabled = has_sftp_config
+            
+            # Mostrar mensaje si está habilitado por defecto
+            if st.session_state.auto_ftp_enabled and 'sftp_config' in st.session_state:
+                st.success("🌙 Actualización nocturna automática activada con tu configuración SFTP")
+            
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                auto_enabled = st.checkbox(
+                    "Activar actualización automática diaria (2:00 AM)",
+                    value=st.session_state.auto_ftp_enabled,
+                    help="Descarga automáticamente el archivo desde SFTP todas las noches"
+                )
+            
+            with col2:
+                if st.button("🔄 Actualizar Ahora", help="Ejecutar actualización inmediata"):
+                    # Priorizar SFTP si está configurado
+                    if 'sftp_config' in st.session_state and st.session_state.get('sftp_password'):
+                        with st.spinner("Actualizando desde SFTP..."):
+                            if auto_update_from_ftp():
+                                st.success("✅ Actualización automática desde SFTP completada")
+                                st.rerun()
+                            else:
+                                st.error("❌ Error en la actualización automática desde SFTP")
+                    elif 'ftp_config' in st.session_state and st.session_state.get('ftp_password'):
+                        with st.spinner("Actualizando desde FTP..."):
+                            if auto_update_from_ftp():
+                                st.success("✅ Actualización automática desde FTP completada")
+                                st.rerun()
+                            else:
+                                st.error("❌ Error en la actualización automática desde FTP")
+                    else:
+                        st.error("❌ Configure primero los datos de FTP o SFTP")
+            
+            # Guardar estado de configuración automática
+            if auto_enabled != st.session_state.auto_ftp_enabled:
+                st.session_state.auto_ftp_enabled = auto_enabled
+                if auto_enabled:
+                    # Verificar si tenemos configuración SFTP
+                    if 'sftp_config' in st.session_state and st.session_state.sftp_config.get('host'):
+                        # Configurar actualización automática para las 2:00 AM
+                        schedule.clear()
+                        schedule.every().day.at("02:00").do(auto_update_from_ftp)
+                        st.success("✅ Actualización automática activada para las 2:00 AM (SFTP)")
+                        st.session_state.sftp_password = "@Q&jb@kpcU(OhpQv95bN0%eI"  # Establecer contraseña
+                    elif 'ftp_config' in st.session_state:
+                        # Verificar que tengamos la contraseña guardada para FTP
+                        if not st.session_state.get('ftp_password'):
+                            st.warning("⚠️ Para la actualización automática, ingrese la contraseña FTP arriba")
+                        else:
+                            schedule.clear()
+                            schedule.every().day.at("02:00").do(auto_update_from_ftp)
+                            st.success("✅ Actualización automática activada para las 2:00 AM (FTP)")
+                    else:
+                        st.warning("⚠️ Configure primero los datos de conexión")
+                elif not auto_enabled:
+                    schedule.clear()
+                    st.info("ℹ️ Actualización automática desactivada")
+            
+            # Configurar tiempo personalizado
+            if auto_enabled:
+                st.markdown("**Horario Personalizado:**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    update_hour = st.selectbox("Hora:", list(range(24)), index=2, help="Hora nocturna recomendada: 1-4 AM")
+                with col2:
+                    update_minute = st.selectbox("Minuto:", [0, 15, 30, 45], index=0)
+                
+                if st.button("⏰ Cambiar Horario"):
+                    # Limpiar trabajos anteriores
+                    schedule.clear()
+                    # Programar nuevo horario
+                    time_str = f"{update_hour:02d}:{update_minute:02d}"
+                    schedule.every().day.at(time_str).do(auto_update_from_ftp)
+                    st.success(f"✅ Actualización programada para las {time_str} (horario nocturno)")
+                    
+                # Mostrar horario actual configurado
+                next_run = schedule.next_run()
+                if next_run:
+                    st.info(f"🌙 Próxima actualización nocturna: {next_run.strftime('%d/%m/%Y %H:%M:%S')}")
+            
+            # Mostrar información de última actualización
+            st.markdown("---")
+            if os.path.exists(CSV_FILE_PATH):
+                mod_time = os.path.getmtime(CSV_FILE_PATH)
+                last_update = datetime.fromtimestamp(mod_time).strftime("%d/%m/%Y %H:%M:%S")
+                st.info(f"📅 Última actualización: {last_update}")
+            
+            # Mostrar última actualización automática
+            if 'last_auto_update' in st.session_state:
+                st.info(f"🤖 Última actualización automática: {st.session_state.last_auto_update}")
+            
+            # Estado del programador
+            if auto_enabled:
+                next_run = schedule.next_run()
+                if next_run:
+                    st.info(f"⏳ Próxima actualización: {next_run.strftime('%d/%m/%Y %H:%M:%S')}")
+        
+        with tab3:
+            st.markdown("**Configuración del Servidor SFTP (SSH):**")
+            st.success("✅ SFTP detectado - Esta es la configuración correcta para tu servidor")
+            st.info("🔧 Configuración preestablecida - Los datos ya están configurados para tu servidor")
             
             with st.form("sftp_form"):
                 sftp_host = st.text_input(
@@ -1293,41 +1073,95 @@ def show_admin_content():
         st.warning("⚠️ No hay datos disponibles. Cargue un archivo CSV para comenzar.")
         return
     
-    # Barra de búsqueda adaptativa
-    if is_mobile_view():
-        # Vista móvil: búsqueda en toda la pantalla
+    # Barra de búsqueda
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
         search_term = st.text_input(
-            "🔍 Buscar:",
-            placeholder="Código, descripción, familia...",
-            help="Búsqueda en tiempo real"
+            "🔍 Buscar productos:",
+            placeholder="Buscar por código, descripción, familia o stock...",
+            help="La búsqueda es en tiempo real y busca en todos los campos"
         )
-        if st.button("🗑️ Limpiar"):
+    
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)  # Espaciado
+        clear_search = st.button("🗑️ Limpiar", help="Limpiar búsqueda")
+        if clear_search:
             st.rerun()
-    else:
-        # Vista escritorio: búsqueda en columnas
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            search_term = st.text_input(
-                "🔍 Buscar productos:",
-                placeholder="Buscar por código, descripción, familia o stock...",
-                help="La búsqueda es en tiempo real y busca en todos los campos"
-            )
-        
-        with col2:
-            st.markdown("<br>", unsafe_allow_html=True)  # Espaciado
-            clear_search = st.button("🗑️ Limpiar", help="Limpiar búsqueda")
-            if clear_search:
-                st.rerun()
     
     # Filtrar datos
     filtered_df = filter_dataframe(df, search_term)
     
-    # Mostrar resultados según el modo de vista
-    if is_mobile_view():
-        display_mobile_results(filtered_df, search_term)
+    # Mostrar resultados
+    if filtered_df.empty:
+        st.warning("🔍 No se encontraron productos que coincidan con la búsqueda.")
     else:
-        display_desktop_results(filtered_df, search_term)
+        # Información de resultados
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("📊 Productos Encontrados", len(filtered_df))
+        with col2:
+            if search_term:
+                st.metric("📋 Total en Base", len(df))
+        with col3:
+            # Botón de exportar
+            csv_export = filtered_df.to_csv(index=False)
+            st.download_button(
+                label="📥 Exportar Resultados",
+                data=csv_export,
+                file_name=f"stock_productos_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                help="Descargar resultados en formato CSV"
+            )
+        
+        st.markdown("---")
+        
+        # Preparar datos para mostrar con indicadores de stock
+        display_df = filtered_df.copy()
+        display_df['Indicador'] = display_df['Stock'].apply(get_stock_color)
+        
+        # Reordenar columnas
+        display_df = display_df[['Indicador', 'Codigo', 'Descripcion', 'Familia', 'Stock']]
+        
+        # Configurar la tabla
+        st.dataframe(
+            display_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Indicador": st.column_config.TextColumn(
+                    "Estado",
+                    help="🟢 Stock Alto | 🟡 Stock Medio | 🔴 Stock Bajo",
+                    width="small"
+                ),
+                "Codigo": st.column_config.TextColumn(
+                    "Código",
+                    width="medium"
+                ),
+                "Descripcion": st.column_config.TextColumn(
+                    "Descripción",
+                    width="large"
+                ),
+                "Familia": st.column_config.TextColumn(
+                    "Familia",
+                    width="medium"
+                ),
+                "Stock": st.column_config.NumberColumn(
+                    "Stock",
+                    width="small",
+                    format="%d"
+                )
+            }
+        )
+        
+        # Leyenda de colores
+        st.markdown("---")
+        st.markdown("""
+        **Leyenda de Stock:**
+        - 🟢 **Stock Alto:** Más de 20 unidades
+        - 🟡 **Stock Medio:** Entre 6 y 20 unidades  
+        - 🔴 **Stock Bajo:** 5 unidades o menos
+        """)
 
 def initialize_auto_scheduler():
     """Inicializar el programador automático al cargar la aplicación"""
