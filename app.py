@@ -83,7 +83,7 @@ def save_data(df):
         st.error(f"❌ Error al guardar los datos: {str(e)}")
         return False
 
-def download_from_ftp(ftp_host, ftp_user, ftp_password, ftp_file_path, ftp_port=21):
+def download_from_ftp(ftp_host, ftp_user, ftp_password, ftp_file_path, ftp_port=21, passive_mode=True, timeout=30):
     """Descargar archivo CSV desde servidor FTP"""
     ftp = None
     try:
@@ -97,7 +97,9 @@ def download_from_ftp(ftp_host, ftp_user, ftp_password, ftp_file_path, ftp_port=
         
         # Intentar conexión
         try:
-            ftp.connect(ftp_host, ftp_port, timeout=30)
+            ftp.connect(ftp_host, ftp_port, timeout=timeout)
+            # Configurar modo pasivo según parámetro
+            ftp.set_pasv(passive_mode)
         except Exception as e:
             return False, f"No se pudo conectar al servidor {ftp_host}:{ftp_port} - {str(e)}"
         
@@ -142,7 +144,7 @@ def download_from_ftp(ftp_host, ftp_user, ftp_password, ftp_file_path, ftp_port=
                 except:
                     pass
 
-def test_ftp_connection(ftp_host, ftp_user, ftp_password, ftp_port=21):
+def test_ftp_connection(ftp_host, ftp_user, ftp_password, ftp_port=21, passive_mode=True, timeout=10):
     """Probar la conectividad FTP sin descargar archivos"""
     ftp = None
     try:
@@ -150,7 +152,9 @@ def test_ftp_connection(ftp_host, ftp_user, ftp_password, ftp_port=21):
         ftp.set_debuglevel(0)
         
         # Probar conexión
-        ftp.connect(ftp_host, ftp_port, timeout=10)
+        ftp.connect(ftp_host, ftp_port, timeout=timeout)
+        # Configurar modo pasivo según parámetro
+        ftp.set_pasv(passive_mode)
         
         # Probar login
         ftp.login(ftp_user, ftp_password)
@@ -171,6 +175,31 @@ def test_ftp_connection(ftp_host, ftp_user, ftp_password, ftp_port=21):
                     ftp.close()
                 except:
                     pass
+
+def auto_diagnose_ftp(ftp_host, ftp_user, ftp_password, ftp_port=21):
+    """Diagnóstico automático probando diferentes configuraciones FTP"""
+    configurations = [
+        {"passive": True, "timeout": 30, "description": "Modo pasivo (recomendado)"},
+        {"passive": False, "timeout": 30, "description": "Modo activo"},
+        {"passive": True, "timeout": 60, "description": "Modo pasivo con timeout extendido"},
+        {"passive": False, "timeout": 60, "description": "Modo activo con timeout extendido"},
+    ]
+    
+    results = []
+    for config in configurations:
+        success, message = test_ftp_connection(
+            ftp_host, ftp_user, ftp_password, ftp_port, 
+            config["passive"], config["timeout"]
+        )
+        results.append({
+            "config": config["description"],
+            "success": success,
+            "message": message
+        })
+        if success:
+            return True, config, results
+    
+    return False, None, results
 
 def auto_update_from_ftp():
     """Función para actualización automática desde FTP"""
@@ -388,12 +417,26 @@ def main():
                     placeholder="/data/productos.csv"
                 )
                 
-                col1, col2, col3 = st.columns(3)
+                # Opciones avanzadas
+                with st.expander("⚙️ Configuración Avanzada"):
+                    passive_mode = st.checkbox(
+                        "Modo Pasivo (recomendado para firewalls)", 
+                        value=True,
+                        help="El modo pasivo resuelve problemas de conexión en la mayoría de casos"
+                    )
+                    connection_timeout = st.slider(
+                        "Timeout de conexión (segundos):", 
+                        min_value=5, 
+                        max_value=60, 
+                        value=30
+                    )
+                
+                col1, col2 = st.columns(2)
                 with col1:
                     save_config = st.form_submit_button("💾 Guardar Configuración")
-                with col2:
                     test_connection = st.form_submit_button("🔧 Probar Conexión")
-                with col3:
+                with col2:
+                    auto_diagnose = st.form_submit_button("🩺 Diagnóstico Automático")
                     download_ftp = st.form_submit_button("🔄 Descargar desde FTP", type="primary")
                 
                 if save_config:
@@ -411,13 +454,40 @@ def main():
                 if test_connection:
                     if all([ftp_host, ftp_user, ftp_password]):
                         with st.spinner("Probando conexión FTP..."):
-                            success, message = test_ftp_connection(ftp_host, ftp_user, ftp_password, ftp_port)
+                            success, message = test_ftp_connection(
+                                ftp_host, ftp_user, ftp_password, ftp_port, 
+                                passive_mode, connection_timeout
+                            )
                             if success:
                                 st.success(f"✅ {message}")
                             else:
                                 st.error(f"❌ {message}")
+                                # Sugerencia para probar modo alternativo
+                                if "timed out" in message.lower():
+                                    st.info("💡 Intenta desactivar el 'Modo Pasivo' en configuración avanzada")
                     else:
                         st.error("❌ Complete todos los campos para probar la conexión")
+                
+                if auto_diagnose:
+                    if all([ftp_host, ftp_user, ftp_password]):
+                        with st.spinner("Ejecutando diagnóstico automático..."):
+                            success, best_config, all_results = auto_diagnose_ftp(ftp_host, ftp_user, ftp_password, ftp_port)
+                            
+                            if success:
+                                st.success(f"✅ Conexión exitosa con: {best_config['description']}")
+                                st.info(f"💡 Configuración recomendada: Modo Pasivo = {best_config['passive']}, Timeout = {best_config['timeout']}s")
+                            else:
+                                st.error("❌ No se pudo establecer conexión con ninguna configuración")
+                            
+                            # Mostrar resultados detallados
+                            with st.expander("Ver resultados detallados del diagnóstico"):
+                                for result in all_results:
+                                    if result['success']:
+                                        st.success(f"✅ {result['config']}: {result['message']}")
+                                    else:
+                                        st.error(f"❌ {result['config']}: {result['message']}")
+                    else:
+                        st.error("❌ Complete todos los campos para ejecutar el diagnóstico")
                 
                 if download_ftp:
                     if all([ftp_host, ftp_user, ftp_password, ftp_file_path]):
@@ -432,7 +502,10 @@ def main():
                             st.session_state.ftp_password = ftp_password
                         
                         with st.spinner("Conectando al servidor FTP..."):
-                            success, result = download_from_ftp(ftp_host, ftp_user, ftp_password, ftp_file_path, ftp_port)
+                            success, result = download_from_ftp(
+                                ftp_host, ftp_user, ftp_password, ftp_file_path, ftp_port,
+                                passive_mode, connection_timeout
+                            )
                             
                             if success:
                                 # Validar contenido descargado
