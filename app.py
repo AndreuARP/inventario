@@ -134,6 +134,116 @@ def validate_csv_content(content):
     except Exception as e:
         return False, f"Error al procesar el archivo: {str(e)}"
 
+def download_from_sftp(sftp_host, sftp_user, sftp_password, sftp_file_path, sftp_port=22, timeout=30):
+    """Descargar archivo CSV desde servidor SFTP"""
+    try:
+        # Configurar el cliente SSH
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        # Conectar al servidor SFTP
+        ssh.connect(
+            hostname=sftp_host,
+            port=sftp_port,
+            username=sftp_user,
+            password=sftp_password,
+            timeout=timeout
+        )
+        
+        # Abrir SFTP
+        sftp = ssh.open_sftp()
+        
+        # Leer el archivo remoto
+        with sftp.open(sftp_file_path, 'r') as remote_file:
+            content = remote_file.read().decode('utf-8')
+        
+        # Cerrar conexiones
+        sftp.close()
+        ssh.close()
+        
+        return True, content, "Archivo descargado exitosamente via SFTP"
+        
+    except paramiko.AuthenticationException:
+        return False, None, "Error de autenticación SFTP - Verifique usuario y contraseña"
+    except paramiko.SSHException as e:
+        return False, None, f"Error de conexión SSH: {str(e)}"
+    except FileNotFoundError:
+        return False, None, f"Archivo no encontrado en el servidor: {sftp_file_path}"
+    except socket.timeout:
+        return False, None, f"Timeout de conexión ({timeout}s) - Servidor no responde"
+    except Exception as e:
+        return False, None, f"Error SFTP: {str(e)}"
+
+def test_sftp_connection(sftp_host, sftp_user, sftp_password, sftp_port=22, timeout=10):
+    """Probar la conectividad SFTP"""
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        ssh.connect(
+            hostname=sftp_host,
+            port=sftp_port,
+            username=sftp_user,
+            password=sftp_password,
+            timeout=timeout
+        )
+        
+        sftp = ssh.open_sftp()
+        sftp.close()
+        ssh.close()
+        
+        return True, "Conexión SFTP exitosa"
+        
+    except Exception as e:
+        return False, f"Error en conexión SFTP: {str(e)}"
+
+def auto_update_from_sftp():
+    """Función para actualización automática desde SFTP"""
+    try:
+        if 'sftp_config' not in st.session_state or not st.session_state.sftp_config.get('enabled', False):
+            return
+        
+        config = st.session_state.sftp_config
+        success, content, message = download_from_sftp(
+            config['host'],
+            config['user'],
+            config['password'],
+            config['file_path'],
+            config.get('port', 22)
+        )
+        
+        if success:
+            is_valid, result = validate_csv_content(content)
+            if is_valid:
+                save_data(result)
+                st.session_state.last_update = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                print(f"Actualización automática exitosa: {st.session_state.last_update}")
+            else:
+                print(f"Error en validación CSV: {result}")
+        else:
+            print(f"Error en actualización automática: {message}")
+            
+    except Exception as e:
+        print(f"Error en actualización automática: {str(e)}")
+
+def schedule_worker():
+    """Worker que ejecuta las tareas programadas"""
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
+
+def initialize_auto_scheduler():
+    """Inicializar el programador automático al cargar la aplicación"""
+    if 'scheduler_initialized' not in st.session_state:
+        st.session_state.scheduler_initialized = True
+        
+        # Configurar actualización a las 2:00 AM
+        schedule.every().day.at("02:00").do(auto_update_from_sftp)
+        
+        # Iniciar worker en hilo separado
+        worker_thread = threading.Thread(target=schedule_worker, daemon=True)
+        worker_thread.start()
+
 def main():
     """Función principal de la aplicación"""
     if not check_password():
@@ -157,14 +267,22 @@ def main():
         
         st.markdown("---")
         
-        # Configuración de rangos de stock para administradores
+        # Configuración para administradores
         if user_type == "admin":
-            st.subheader("⚙️ Configuración de Stock")
-            
+            # Inicializar configuraciones
             if 'stock_high_threshold' not in st.session_state:
                 st.session_state.stock_high_threshold = 20
             if 'stock_low_threshold' not in st.session_state:
                 st.session_state.stock_low_threshold = 5
+            if 'sftp_config' not in st.session_state:
+                st.session_state.sftp_config = {
+                    'enabled': False,
+                    'host': 'home567855122.1and1-data.host',
+                    'port': 22,
+                    'user': 'acc1195143440',
+                    'password': '@Q&jb@kpcU(OhpQv95bN0%eI',
+                    'file_path': '/stock/stock.csv'
+                }
             
             with st.expander("🎯 Configurar Rangos de Stock"):
                 col1, col2 = st.columns(2)
@@ -195,27 +313,89 @@ def main():
                 
                 st.info(f"📊 Actual: 🔴≤{st.session_state.stock_low_threshold} | 🟡{st.session_state.stock_low_threshold+1}-{st.session_state.stock_high_threshold} | 🟢>{st.session_state.stock_high_threshold}")
             
-            st.markdown("---")
-            st.subheader("📂 Actualizar Datos")
-            
-            uploaded_file = st.file_uploader(
-                "Cargar archivo CSV:",
-                type=['csv'],
-                help="El archivo debe contener las columnas: Codigo, Descripcion, Familia, Stock"
-            )
-            
-            if uploaded_file is not None:
-                content = uploaded_file.read().decode('utf-8')
-                is_valid, result = validate_csv_content(content)
+            with st.expander("🌐 Configuración SFTP"):
+                st.markdown("**Configurar servidor SFTP para actualizaciones automáticas**")
                 
-                if is_valid:
-                    st.success("✅ Archivo válido")
-                    if st.button("💾 Actualizar Base de Datos", type="primary"):
-                        if save_data(result):
-                            st.success("🎉 ¡Datos actualizados exitosamente!")
-                            st.rerun()
+                col1, col2 = st.columns(2)
+                with col1:
+                    sftp_host = st.text_input("🖥️ Servidor SFTP:", value=st.session_state.sftp_config['host'])
+                    sftp_user = st.text_input("👤 Usuario:", value=st.session_state.sftp_config['user'])
+                    sftp_port = st.number_input("🔌 Puerto:", min_value=1, max_value=65535, value=st.session_state.sftp_config['port'])
+                
+                with col2:
+                    sftp_password = st.text_input("🔑 Contraseña:", value=st.session_state.sftp_config['password'], type="password")
+                    sftp_file_path = st.text_input("📁 Ruta del archivo:", value=st.session_state.sftp_config['file_path'])
+                    sftp_enabled = st.checkbox("✅ Habilitar actualizaciones automáticas", value=st.session_state.sftp_config['enabled'])
+                
+                col_test, col_save = st.columns(2)
+                
+                with col_test:
+                    if st.button("🔍 Probar Conexión", key="test_sftp"):
+                        with st.spinner("Probando conexión SFTP..."):
+                            success, message = test_sftp_connection(sftp_host, sftp_user, sftp_password, sftp_port)
+                            if success:
+                                st.success(f"✅ {message}")
+                            else:
+                                st.error(f"❌ {message}")
+                
+                with col_save:
+                    if st.button("💾 Guardar Config. SFTP", key="save_sftp_config"):
+                        st.session_state.sftp_config = {
+                            'enabled': sftp_enabled,
+                            'host': sftp_host,
+                            'port': sftp_port,
+                            'user': sftp_user,
+                            'password': sftp_password,
+                            'file_path': sftp_file_path
+                        }
+                        st.success("✅ Configuración SFTP guardada")
+                        st.rerun()
+                
+                if st.button("🔄 Actualizar Ahora desde SFTP", key="manual_sftp_update"):
+                    with st.spinner("Descargando archivo desde SFTP..."):
+                        success, content, message = download_from_sftp(sftp_host, sftp_user, sftp_password, sftp_file_path, sftp_port)
+                        
+                        if success:
+                            is_valid, result = validate_csv_content(content)
+                            if is_valid:
+                                if save_data(result):
+                                    st.session_state.last_update = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                    st.success(f"🎉 ¡Datos actualizados desde SFTP exitosamente!")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Error al guardar los datos")
+                            else:
+                                st.error(f"❌ Archivo CSV inválido: {result}")
+                        else:
+                            st.error(f"❌ {message}")
+                
+                # Estado de las actualizaciones automáticas
+                if st.session_state.sftp_config['enabled']:
+                    st.info("🤖 Actualizaciones automáticas: HABILITADAS (2:00 AM diario)")
+                    if 'last_update' in st.session_state:
+                        st.info(f"📅 Última actualización: {st.session_state.last_update}")
                 else:
-                    st.error(f"❌ {result}")
+                    st.warning("⚠️ Actualizaciones automáticas: DESHABILITADAS")
+            
+            with st.expander("📂 Actualizar Datos Manualmente"):
+                uploaded_file = st.file_uploader(
+                    "Cargar archivo CSV:",
+                    type=['csv'],
+                    help="El archivo debe contener las columnas: Codigo, Descripcion, Familia, Stock"
+                )
+                
+                if uploaded_file is not None:
+                    content = uploaded_file.read().decode('utf-8')
+                    is_valid, result = validate_csv_content(content)
+                    
+                    if is_valid:
+                        st.success("✅ Archivo válido")
+                        if st.button("💾 Actualizar Base de Datos", type="primary"):
+                            if save_data(result):
+                                st.success("🎉 ¡Datos actualizados exitosamente!")
+                                st.rerun()
+                    else:
+                        st.error(f"❌ {result}")
         
         else:
             # Para usuarios viewer
@@ -324,4 +504,6 @@ def main():
         """)
 
 if __name__ == "__main__":
+    # Inicializar el scheduler automático
+    initialize_auto_scheduler()
     main()
