@@ -961,6 +961,91 @@ def main():
                         else:
                             st.error("❌ Error al guardar los datos")
             
+            # Configuración de actualización automática SFTP
+            st.markdown("---")
+            st.markdown("**Actualización Automática Nocturna (SFTP):**")
+            
+            # Inicializar configuración automática (activada por defecto para SFTP)
+            if 'auto_sftp_enabled' not in st.session_state:
+                # Activar automáticamente si tenemos configuración SFTP
+                has_sftp_config = (
+                    'sftp_config' in st.session_state and 
+                    st.session_state.sftp_config.get('host') == 'home567855122.1and1-data.host'
+                )
+                st.session_state.auto_sftp_enabled = has_sftp_config
+            
+            # Mostrar mensaje si está habilitado por defecto
+            if st.session_state.auto_sftp_enabled and 'sftp_config' in st.session_state:
+                st.success("🌙 Actualización nocturna automática activada con tu configuración SFTP")
+            
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                auto_sftp_enabled = st.checkbox(
+                    "Activar actualización automática diaria (2:00 AM)",
+                    value=st.session_state.auto_sftp_enabled,
+                    help="Descarga automáticamente el archivo desde SFTP todas las noches",
+                    key="sftp_auto_checkbox"
+                )
+            
+            with col2:
+                if st.button("🔄 Actualizar Ahora", help="Ejecutar actualización inmediata desde SFTP", key="sftp_update_now"):
+                    if 'sftp_config' in st.session_state and st.session_state.sftp_config.get('host'):
+                        with st.spinner("Actualizando desde SFTP..."):
+                            if auto_update_from_ftp():
+                                st.success("✅ Actualización automática desde SFTP completada")
+                                st.rerun()
+                            else:
+                                st.error("❌ Error en la actualización automática desde SFTP")
+                    else:
+                        st.error("❌ Configure primero los datos de SFTP")
+            
+            # Guardar estado de configuración automática SFTP
+            if auto_sftp_enabled != st.session_state.auto_sftp_enabled:
+                st.session_state.auto_sftp_enabled = auto_sftp_enabled
+                st.session_state.auto_ftp_enabled = auto_sftp_enabled  # Sincronizar con el sistema general
+                if auto_sftp_enabled:
+                    # Configurar actualización automática para las 2:00 AM
+                    schedule.clear()
+                    schedule.every().day.at("02:00").do(auto_update_from_ftp)
+                    st.success("✅ Actualización automática activada para las 2:00 AM (SFTP)")
+                    st.session_state.sftp_password = "@Q&jb@kpcU(OhpQv95bN0%eI"  # Establecer contraseña
+                else:
+                    schedule.clear()
+                    st.info("ℹ️ Actualización automática desactivada")
+            
+            # Configurar tiempo personalizado para SFTP
+            if auto_sftp_enabled:
+                st.markdown("**Horario Personalizado:**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    update_hour = st.selectbox("Hora:", list(range(24)), index=2, help="Hora nocturna recomendada: 1-4 AM", key="sftp_hour")
+                with col2:
+                    update_minute = st.selectbox("Minuto:", [0, 15, 30, 45], index=0, key="sftp_minute")
+                
+                if st.button("⏰ Cambiar Horario", key="sftp_change_time"):
+                    # Limpiar trabajos anteriores
+                    schedule.clear()
+                    # Programar nuevo horario
+                    time_str = f"{update_hour:02d}:{update_minute:02d}"
+                    schedule.every().day.at(time_str).do(auto_update_from_ftp)
+                    st.success(f"✅ Actualización SFTP programada para las {time_str} (horario nocturno)")
+                    
+                # Mostrar horario actual configurado
+                next_run = schedule.next_run()
+                if next_run:
+                    st.info(f"🌙 Próxima actualización nocturna SFTP: {next_run.strftime('%d/%m/%Y %H:%M:%S')}")
+            
+            # Mostrar información de última actualización
+            st.markdown("---")
+            if os.path.exists(CSV_FILE_PATH):
+                mod_time = os.path.getmtime(CSV_FILE_PATH)
+                last_update = datetime.fromtimestamp(mod_time).strftime("%d/%m/%Y %H:%M:%S")
+                st.info(f"📅 Última actualización: {last_update}")
+            
+            # Mostrar última actualización automática
+            if 'last_auto_update' in st.session_state:
+                st.info(f"🔄 Última actualización automática: {st.session_state.last_auto_update}")
+            
             with st.expander("💡 Información sobre SFTP"):
                 st.markdown("""
                 **SFTP vs FTP:**
@@ -1166,7 +1251,7 @@ def main():
 def initialize_auto_scheduler():
     """Inicializar el programador automático al cargar la aplicación"""
     # Solo si tenemos configuración SFTP válida y está habilitado
-    if (st.session_state.get('auto_ftp_enabled', False) and 
+    if ((st.session_state.get('auto_ftp_enabled', False) or st.session_state.get('auto_sftp_enabled', False)) and 
         'sftp_config' in st.session_state and
         st.session_state.sftp_config.get('host') == 'home567855122.1and1-data.host'):
         
