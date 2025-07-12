@@ -5,6 +5,9 @@ from io import StringIO
 import csv
 import ftplib
 from datetime import datetime
+import schedule
+import time
+import threading
 from datetime import datetime
 
 # Configuración de la página
@@ -104,6 +107,48 @@ def download_from_ftp(ftp_host, ftp_user, ftp_password, ftp_file_path, ftp_port=
         return False, f"Error de FTP: {str(e)}"
     except Exception as e:
         return False, f"Error general: {str(e)}"
+
+def auto_update_from_ftp():
+    """Función para actualización automática desde FTP"""
+    if 'ftp_config' in st.session_state and 'auto_ftp_enabled' in st.session_state:
+        config = st.session_state.ftp_config
+        password = st.session_state.get('ftp_password', '')
+        
+        if all([config['host'], config['user'], config['file_path'], password]):
+            try:
+                success, result = download_from_ftp(
+                    config['host'], 
+                    config['user'], 
+                    password, 
+                    config['file_path'], 
+                    config['port']
+                )
+                
+                if success:
+                    is_valid, csv_result = validate_csv_content(result)
+                    if is_valid:
+                        if save_data(csv_result):
+                            st.session_state['last_auto_update'] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                            return True
+                return False
+            except:
+                return False
+    return False
+
+def schedule_worker():
+    """Worker que ejecuta las tareas programadas"""
+    while True:
+        schedule.run_pending()
+        time.sleep(60)  # Revisa cada minuto
+
+# Inicializar el hilo de programación si no existe
+if 'scheduler_started' not in st.session_state:
+    st.session_state.scheduler_started = True
+    # Programar actualización diaria a las 6:00 AM
+    schedule.every().day.at("06:00").do(auto_update_from_ftp)
+    # Iniciar el worker en un hilo separado
+    scheduler_thread = threading.Thread(target=schedule_worker, daemon=True)
+    scheduler_thread.start()
 
 def validate_csv_content(content):
     """Validar el contenido del archivo CSV"""
@@ -244,7 +289,11 @@ def main():
                     value=st.session_state.ftp_config['user'],
                     placeholder="usuario"
                 )
-                ftp_password = st.text_input("Contraseña:", type="password")
+                ftp_password = st.text_input(
+                    "Contraseña:", 
+                    type="password",
+                    help="La contraseña se guardará de forma segura para actualizaciones automáticas"
+                )
                 ftp_file_path = st.text_input(
                     "Ruta del archivo:", 
                     value=st.session_state.ftp_config['file_path'],
@@ -264,6 +313,8 @@ def main():
                         'user': ftp_user,
                         'file_path': ftp_file_path
                     }
+                    if ftp_password:
+                        st.session_state.ftp_password = ftp_password
                     st.success("✅ Configuración FTP guardada")
                     st.rerun()
                 
@@ -276,6 +327,8 @@ def main():
                             'user': ftp_user,
                             'file_path': ftp_file_path
                         }
+                        if ftp_password:
+                            st.session_state.ftp_password = ftp_password
                         
                         with st.spinner("Conectando al servidor FTP..."):
                             success, result = download_from_ftp(ftp_host, ftp_user, ftp_password, ftp_file_path, ftp_port)
@@ -299,11 +352,79 @@ def main():
                     else:
                         st.error("❌ Por favor complete todos los campos")
             
+            # Configuración de actualización automática
+            st.markdown("---")
+            st.markdown("**Actualización Automática:**")
+            
+            # Inicializar configuración automática
+            if 'auto_ftp_enabled' not in st.session_state:
+                st.session_state.auto_ftp_enabled = False
+            
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                auto_enabled = st.checkbox(
+                    "Activar actualización automática diaria (6:00 AM)",
+                    value=st.session_state.auto_ftp_enabled,
+                    help="Descarga automáticamente el archivo desde FTP todos los días"
+                )
+            
+            with col2:
+                if st.button("🔄 Actualizar Ahora", help="Ejecutar actualización inmediata"):
+                    if 'ftp_config' in st.session_state and st.session_state.get('ftp_password'):
+                        with st.spinner("Actualizando desde FTP..."):
+                            if auto_update_from_ftp():
+                                st.success("✅ Actualización automática completada")
+                                st.rerun()
+                            else:
+                                st.error("❌ Error en la actualización automática")
+                    else:
+                        st.error("❌ Configure primero los datos de FTP")
+            
+            # Guardar estado de configuración automática
+            if auto_enabled != st.session_state.auto_ftp_enabled:
+                st.session_state.auto_ftp_enabled = auto_enabled
+                if auto_enabled and 'ftp_config' in st.session_state:
+                    # Verificar que tengamos la contraseña guardada
+                    if not st.session_state.get('ftp_password'):
+                        st.warning("⚠️ Para la actualización automática, ingrese la contraseña FTP arriba")
+                    else:
+                        st.success("✅ Actualización automática activada para las 6:00 AM")
+                elif not auto_enabled:
+                    st.info("ℹ️ Actualización automática desactivada")
+            
+            # Configurar tiempo personalizado
+            if auto_enabled:
+                st.markdown("**Horario Personalizado:**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    update_hour = st.selectbox("Hora:", list(range(24)), index=6)
+                with col2:
+                    update_minute = st.selectbox("Minuto:", [0, 15, 30, 45], index=0)
+                
+                if st.button("⏰ Cambiar Horario"):
+                    # Limpiar trabajos anteriores
+                    schedule.clear()
+                    # Programar nuevo horario
+                    time_str = f"{update_hour:02d}:{update_minute:02d}"
+                    schedule.every().day.at(time_str).do(auto_update_from_ftp)
+                    st.success(f"✅ Actualización programada para las {time_str}")
+            
             # Mostrar información de última actualización
+            st.markdown("---")
             if os.path.exists(CSV_FILE_PATH):
                 mod_time = os.path.getmtime(CSV_FILE_PATH)
                 last_update = datetime.fromtimestamp(mod_time).strftime("%d/%m/%Y %H:%M:%S")
                 st.info(f"📅 Última actualización: {last_update}")
+            
+            # Mostrar última actualización automática
+            if 'last_auto_update' in st.session_state:
+                st.info(f"🤖 Última actualización automática: {st.session_state.last_auto_update}")
+            
+            # Estado del programador
+            if auto_enabled:
+                next_run = schedule.next_run()
+                if next_run:
+                    st.info(f"⏳ Próxima actualización: {next_run.strftime('%d/%m/%Y %H:%M:%S')}")
         
         st.markdown("---")
         

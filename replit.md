@@ -40,6 +40,8 @@ Preferred communication style: Simple, everyday language.
 - File I/O operations using Python's built-in libraries
 - FTP integration for remote file downloads and automatic updates
 - Session-based configuration storage for FTP credentials
+- Scheduled automatic FTP updates using background threads
+- Customizable update timing and frequency
 
 ### User Interface
 - Page configuration with custom title, icon, and layout
@@ -62,7 +64,8 @@ Preferred communication style: Simple, everyday language.
 ### Core Dependencies
 - **Streamlit**: Web framework for the application interface
 - **Pandas**: Data manipulation and analysis
-- **Standard Library**: os, io, csv, ftplib, datetime for file operations and FTP connectivity
+- **Standard Library**: os, io, csv, ftplib, datetime, threading for file operations and FTP connectivity
+- **Schedule**: Task scheduling for automatic updates
 
 ### File Dependencies
 - `data/productos.csv`: Product inventory data file
