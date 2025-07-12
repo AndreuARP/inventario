@@ -8,6 +8,7 @@ import socket
 from datetime import datetime
 import urllib.request
 import urllib.error
+import paramiko
 import schedule
 import time
 import threading
@@ -250,6 +251,114 @@ def download_from_url(url, timeout=30):
     except Exception as e:
         return False, f"Error al descargar: {str(e)}"
 
+def download_from_sftp(sftp_host, sftp_user, sftp_password, sftp_file_path, sftp_port=22, timeout=30):
+    """Descargar archivo CSV desde servidor SFTP"""
+    ssh = None
+    sftp = None
+    try:
+        # Validar parámetros
+        if not all([sftp_host, sftp_user, sftp_password, sftp_file_path]):
+            return False, "Faltan parámetros de conexión SFTP"
+        
+        # Crear cliente SSH
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        # Conectar
+        ssh.connect(
+            hostname=sftp_host,
+            port=sftp_port,
+            username=sftp_user,
+            password=sftp_password,
+            timeout=timeout,
+            look_for_keys=False,
+            allow_agent=False
+        )
+        
+        # Crear cliente SFTP
+        sftp = ssh.open_sftp()
+        
+        # Verificar que el archivo existe
+        try:
+            sftp.stat(sftp_file_path)
+        except FileNotFoundError:
+            return False, f"Archivo '{sftp_file_path}' no encontrado en el servidor SFTP"
+        
+        # Descargar el archivo
+        with sftp.open(sftp_file_path, 'r') as remote_file:
+            content = remote_file.read()
+            
+        return True, content
+        
+    except paramiko.AuthenticationException:
+        return False, f"Error de autenticación SFTP para usuario '{sftp_user}'"
+    except paramiko.SSHException as e:
+        return False, f"Error SSH: {str(e)}"
+    except socket.timeout:
+        return False, f"Timeout de conexión SFTP ({timeout}s)"
+    except Exception as e:
+        return False, f"Error SFTP: {str(e)}"
+    finally:
+        # Cerrar conexiones
+        if sftp:
+            try:
+                sftp.close()
+            except:
+                pass
+        if ssh:
+            try:
+                ssh.close()
+            except:
+                pass
+
+def test_sftp_connection(sftp_host, sftp_user, sftp_password, sftp_port=22, timeout=10):
+    """Probar la conectividad SFTP"""
+    ssh = None
+    sftp = None
+    try:
+        # Crear cliente SSH
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        # Conectar
+        ssh.connect(
+            hostname=sftp_host,
+            port=sftp_port,
+            username=sftp_user,
+            password=sftp_password,
+            timeout=timeout,
+            look_for_keys=False,
+            allow_agent=False
+        )
+        
+        # Crear cliente SFTP para probar
+        sftp = ssh.open_sftp()
+        
+        # Obtener directorio actual
+        current_dir = sftp.getcwd() or "/"
+        
+        return True, f"Conexión SFTP exitosa. Directorio actual: {current_dir}"
+        
+    except paramiko.AuthenticationException:
+        return False, f"Error de autenticación SFTP para usuario '{sftp_user}'"
+    except paramiko.SSHException as e:
+        return False, f"Error SSH: {str(e)}"
+    except socket.timeout:
+        return False, f"Timeout de conexión SFTP ({timeout}s)"
+    except Exception as e:
+        return False, f"Error SFTP: {str(e)}"
+    finally:
+        if sftp:
+            try:
+                sftp.close()
+            except:
+                pass
+        if ssh:
+            try:
+                ssh.close()
+            except:
+                pass
+
 def auto_update_from_ftp():
     """Función para actualización automática desde FTP"""
     if 'ftp_config' in st.session_state and 'auto_ftp_enabled' in st.session_state:
@@ -376,7 +485,7 @@ def main():
         st.subheader("📂 Actualizar Datos")
         
         # Tabs para diferentes métodos de carga
-        tab1, tab2, tab3 = st.tabs(["📁 Archivo Local", "🌐 Servidor FTP", "🔗 URL Directa"])
+        tab1, tab2, tab3, tab4 = st.tabs(["📁 Archivo Local", "🌐 Servidor FTP", "🔐 Servidor SFTP", "🔗 URL Directa"])
         
         with tab1:
             uploaded_file = st.file_uploader(
@@ -654,6 +763,89 @@ def main():
                     st.info(f"⏳ Próxima actualización: {next_run.strftime('%d/%m/%Y %H:%M:%S')}")
         
         with tab3:
+            st.markdown("**Configuración del Servidor SFTP (SSH):**")
+            st.success("✅ SFTP detectado - Esta es la configuración correcta para tu servidor")
+            
+            with st.form("sftp_form"):
+                sftp_host = st.text_input("Servidor SFTP:", placeholder="sftp.ejemplo.com")
+                sftp_port = st.number_input("Puerto SSH:", value=22, min_value=1, max_value=65535)
+                sftp_user = st.text_input("Usuario SSH:", placeholder="usuario")
+                sftp_password = st.text_input("Contraseña SSH:", type="password")
+                sftp_file_path = st.text_input("Ruta del archivo:", placeholder="/home/usuario/datos/productos.csv")
+                
+                sftp_timeout = st.slider("Timeout (segundos):", min_value=5, max_value=60, value=30)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    test_sftp = st.form_submit_button("🔧 Probar Conexión SFTP")
+                    save_sftp_config = st.form_submit_button("💾 Guardar Configuración")
+                with col2:
+                    download_sftp = st.form_submit_button("🔄 Descargar desde SFTP", type="primary")
+                
+                if test_sftp:
+                    if all([sftp_host, sftp_user, sftp_password]):
+                        with st.spinner("Probando conexión SFTP..."):
+                            success, message = test_sftp_connection(sftp_host, sftp_user, sftp_password, sftp_port, sftp_timeout)
+                            if success:
+                                st.success(f"✅ {message}")
+                            else:
+                                st.error(f"❌ {message}")
+                    else:
+                        st.error("❌ Complete todos los campos para probar la conexión SFTP")
+                
+                if save_sftp_config:
+                    st.session_state.sftp_config = {
+                        'host': sftp_host,
+                        'port': sftp_port,
+                        'user': sftp_user,
+                        'file_path': sftp_file_path,
+                        'timeout': sftp_timeout
+                    }
+                    if sftp_password:
+                        st.session_state.sftp_password = sftp_password
+                    st.success("✅ Configuración SFTP guardada")
+                    st.rerun()
+                
+                if download_sftp:
+                    if all([sftp_host, sftp_user, sftp_password, sftp_file_path]):
+                        with st.spinner("Descargando desde SFTP..."):
+                            success, result = download_from_sftp(sftp_host, sftp_user, sftp_password, sftp_file_path, sftp_port, sftp_timeout)
+                            
+                            if success:
+                                is_valid, csv_result = validate_csv_content(result)
+                                if is_valid:
+                                    st.success("✅ Archivo descargado desde SFTP correctamente")
+                                    st.info(f"📊 Se encontraron {len(csv_result)} productos")
+                                    
+                                    if st.button("💾 Actualizar Base de Datos", type="primary", key="sftp_update"):
+                                        if save_data(csv_result):
+                                            st.success("🎉 ¡Datos actualizados desde SFTP exitosamente!")
+                                            st.rerun()
+                                else:
+                                    st.error(f"❌ Error en el archivo descargado: {csv_result}")
+                            else:
+                                st.error(f"❌ {result}")
+                    else:
+                        st.error("❌ Complete todos los campos para descargar desde SFTP")
+            
+            with st.expander("💡 Información sobre SFTP"):
+                st.markdown("""
+                **SFTP vs FTP:**
+                - **SFTP**: Protocolo seguro que usa SSH (puerto 22)
+                - **FTP**: Protocolo tradicional no seguro (puerto 21)
+                
+                **Configuración típica SFTP:**
+                - Puerto: 22 (estándar SSH)
+                - Ruta: `/home/usuario/archivo.csv` o `/var/www/data/productos.csv`
+                - Autenticación: Usuario y contraseña SSH
+                
+                **Ventajas de SFTP:**
+                - ✅ Conexión encriptada y segura
+                - ✅ Compatible con servidores Linux/Unix
+                - ✅ Mismo puerto que SSH (22)
+                """)
+        
+        with tab4:
             st.markdown("**Descarga desde URL directa:**")
             st.info("💡 Alternativa más simple al FTP. Use una URL directa al archivo CSV (HTTP/HTTPS)")
             

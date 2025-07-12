@@ -38,7 +38,7 @@ Preferred communication style: Simple, everyday language.
 - CSV file-based data storage for simplicity
 - Pandas integration for data manipulation and analysis
 - File I/O operations using Python's built-in libraries
-- FTP integration for remote file downloads and automatic updates
+- FTP and SFTP integration for remote file downloads and automatic updates
 - Session-based configuration storage for FTP credentials
 - Scheduled automatic FTP updates using background threads
 - Customizable update timing and frequency
@@ -65,6 +65,7 @@ Preferred communication style: Simple, everyday language.
 - **Streamlit**: Web framework for the application interface
 - **Pandas**: Data manipulation and analysis
 - **Standard Library**: os, io, csv, ftplib, datetime, threading for file operations and FTP connectivity
+- **Paramiko**: SFTP/SSH client for secure file transfers
 - **Schedule**: Task scheduling for automatic updates
 
 ### File Dependencies
