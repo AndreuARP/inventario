@@ -908,10 +908,9 @@ def main():
                                     st.success("✅ Archivo descargado desde SFTP correctamente")
                                     st.info(f"📊 Se encontraron {len(csv_result)} productos")
                                     
-                                    if st.button("💾 Actualizar Base de Datos", type="primary", key="sftp_update"):
-                                        if save_data(csv_result):
-                                            st.success("🎉 ¡Datos actualizados desde SFTP exitosamente!")
-                                            st.rerun()
+                                    # Guardar el resultado temporalmente para uso fuera del formulario
+                                    st.session_state['sftp_download_result'] = csv_result
+                                    st.session_state['sftp_download_ready'] = True
                                 else:
                                     st.error(f"❌ Error en el archivo descargado: {csv_result}")
                                     # Mostrar información adicional para debug
@@ -920,6 +919,20 @@ def main():
                                 st.error(f"❌ {result}")
                     else:
                         st.error("❌ Complete todos los campos para descargar desde SFTP")
+            
+            # Botón para actualizar base de datos fuera del formulario
+            if st.session_state.get('sftp_download_ready', False):
+                if st.button("💾 Actualizar Base de Datos", type="primary", key="sftp_update_outside"):
+                    csv_result = st.session_state.get('sftp_download_result')
+                    if csv_result is not None:
+                        if save_data(csv_result):
+                            st.success("🎉 ¡Datos actualizados desde SFTP exitosamente!")
+                            # Limpiar el estado temporal
+                            st.session_state['sftp_download_ready'] = False
+                            st.session_state.pop('sftp_download_result', None)
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al guardar los datos")
             
             with st.expander("💡 Información sobre SFTP"):
                 st.markdown("""
