@@ -4,7 +4,10 @@ import os
 from io import StringIO
 import csv
 import ftplib
+import socket
 from datetime import datetime
+import urllib.request
+import urllib.error
 import schedule
 import time
 import threading
@@ -144,8 +147,23 @@ def download_from_ftp(ftp_host, ftp_user, ftp_password, ftp_file_path, ftp_port=
                 except:
                     pass
 
+def check_network_connectivity(host, port, timeout=5):
+    """Verificar conectividad de red básica antes de FTP"""
+    try:
+        socket.setdefaulttimeout(timeout)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        result = sock.connect_ex((host, port))
+        sock.close()
+        return result == 0
+    except Exception:
+        return False
+
 def test_ftp_connection(ftp_host, ftp_user, ftp_password, ftp_port=21, passive_mode=True, timeout=10):
     """Probar la conectividad FTP sin descargar archivos"""
+    # Primero verificar conectividad básica
+    if not check_network_connectivity(ftp_host, ftp_port, timeout=5):
+        return False, f"No se puede alcanzar el servidor {ftp_host}:{ftp_port}. Verifique la dirección y puerto."
+    
     ftp = None
     try:
         ftp = ftplib.FTP()
@@ -164,6 +182,17 @@ def test_ftp_connection(ftp_host, ftp_user, ftp_password, ftp_port=21, passive_m
         
         return True, f"Conexión exitosa. Directorio actual: {current_dir}"
         
+    except ftplib.error_perm as e:
+        if "530" in str(e):
+            return False, f"Error de autenticación: Usuario '{ftp_user}' o contraseña incorrectos"
+        else:
+            return False, f"Error de permisos FTP: {str(e)}"
+    except ftplib.error_temp as e:
+        return False, f"Error temporal del servidor FTP: {str(e)}"
+    except socket.timeout:
+        return False, f"Timeout de conexión. El servidor {ftp_host}:{ftp_port} no responde en {timeout} segundos"
+    except ConnectionRefusedError:
+        return False, f"Conexión rechazada por {ftp_host}:{ftp_port}. Verifique que el servicio FTP esté ejecutándose"
     except Exception as e:
         return False, f"Error de conexión: {str(e)}"
     finally:
@@ -200,6 +229,26 @@ def auto_diagnose_ftp(ftp_host, ftp_user, ftp_password, ftp_port=21):
             return True, config, results
     
     return False, None, results
+
+def download_from_url(url, timeout=30):
+    """Descargar archivo CSV desde URL directa"""
+    try:
+        # Configurar timeout
+        urllib.request.socket.setdefaulttimeout(timeout)
+        
+        # Descargar el archivo
+        with urllib.request.urlopen(url) as response:
+            content = response.read().decode('utf-8')
+            return True, content
+            
+    except urllib.error.HTTPError as e:
+        return False, f"Error HTTP {e.code}: {e.reason}"
+    except urllib.error.URLError as e:
+        return False, f"Error de URL: {str(e.reason)}"
+    except socket.timeout:
+        return False, f"Timeout: La descarga tardó más de {timeout} segundos"
+    except Exception as e:
+        return False, f"Error al descargar: {str(e)}"
 
 def auto_update_from_ftp():
     """Función para actualización automática desde FTP"""
@@ -327,7 +376,7 @@ def main():
         st.subheader("📂 Actualizar Datos")
         
         # Tabs para diferentes métodos de carga
-        tab1, tab2 = st.tabs(["📁 Archivo Local", "🌐 Servidor FTP"])
+        tab1, tab2, tab3 = st.tabs(["📁 Archivo Local", "🌐 Servidor FTP", "🔗 URL Directa"])
         
         with tab1:
             uploaded_file = st.file_uploader(
@@ -373,11 +422,15 @@ def main():
                   - Usuario: tu usuario FTP
                   - Ruta: `/public_html/data/productos.csv`
                 
-                **Problemas comunes:**
+                **Problemas comunes y soluciones:**
                 - ❌ "Connection refused": Revisar host y puerto
                 - ❌ "Authentication failed": Verificar usuario/contraseña
                 - ❌ "File not found": Confirmar ruta completa del archivo
-                - ❌ "Timeout": El servidor puede estar inaccesible
+                - ❌ "Timeout": Probar modo activo/pasivo o usar URL directa
+                - ❌ "No se puede alcanzar": Firewall o red bloqueando conexión
+                
+                **💡 Alternativa recomendada:**
+                Si FTP sigue fallando, use la pestaña "URL Directa" que es más compatible con firewalls y redes empresariales.
                 """)
             
             # Inicializar configuración FTP en session state
@@ -599,6 +652,83 @@ def main():
                 next_run = schedule.next_run()
                 if next_run:
                     st.info(f"⏳ Próxima actualización: {next_run.strftime('%d/%m/%Y %H:%M:%S')}")
+        
+        with tab3:
+            st.markdown("**Descarga desde URL directa:**")
+            st.info("💡 Alternativa más simple al FTP. Use una URL directa al archivo CSV (HTTP/HTTPS)")
+            
+            with st.form("url_form"):
+                csv_url = st.text_input(
+                    "URL del archivo CSV:",
+                    placeholder="https://ejemplo.com/datos/productos.csv",
+                    help="URL directa que apunte al archivo CSV"
+                )
+                
+                url_timeout = st.slider(
+                    "Timeout de descarga (segundos):",
+                    min_value=5,
+                    max_value=120,
+                    value=30
+                )
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    test_url = st.form_submit_button("🔗 Probar URL")
+                with col2:
+                    download_url = st.form_submit_button("📥 Descargar desde URL", type="primary")
+                
+                if test_url:
+                    if csv_url:
+                        with st.spinner("Probando URL..."):
+                            success, result = download_from_url(csv_url, timeout=10)
+                            if success:
+                                # Verificar que sea CSV válido
+                                is_valid, csv_result = validate_csv_content(result)
+                                if is_valid:
+                                    st.success(f"✅ URL válida. Se encontraron {len(csv_result)} productos")
+                                else:
+                                    st.error(f"❌ El archivo no es un CSV válido: {csv_result}")
+                            else:
+                                st.error(f"❌ {result}")
+                    else:
+                        st.error("❌ Ingrese una URL válida")
+                
+                if download_url:
+                    if csv_url:
+                        with st.spinner("Descargando desde URL..."):
+                            success, result = download_from_url(csv_url, url_timeout)
+                            if success:
+                                is_valid, csv_result = validate_csv_content(result)
+                                if is_valid:
+                                    st.success("✅ Archivo descargado y validado correctamente")
+                                    st.info(f"📊 Se encontraron {len(csv_result)} productos")
+                                    
+                                    if st.button("💾 Actualizar Base de Datos", type="primary", key="url_update"):
+                                        if save_data(csv_result):
+                                            st.success("🎉 ¡Datos actualizados desde URL exitosamente!")
+                                            st.rerun()
+                                else:
+                                    st.error(f"❌ Error en el archivo descargado: {csv_result}")
+                            else:
+                                st.error(f"❌ {result}")
+                    else:
+                        st.error("❌ Ingrese una URL válida")
+            
+            # Ejemplos de URLs
+            with st.expander("💡 Ejemplos de URLs válidas"):
+                st.markdown("""
+                **Tipos de URLs compatibles:**
+                - `https://ejemplo.com/datos/productos.csv`
+                - `http://ftp.ejemplo.com/public/stock.csv`
+                - `https://drive.google.com/uc?export=download&id=FILE_ID` (Google Drive)
+                - `https://github.com/usuario/repo/raw/main/data.csv` (GitHub)
+                
+                **Ventajas de usar URL directa:**
+                - ✅ Más simple que configurar FTP
+                - ✅ Funciona con servidores web estándar
+                - ✅ Compatible con servicios en la nube
+                - ✅ No requiere credenciales especiales
+                """)
         
         st.markdown("---")
         
