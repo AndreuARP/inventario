@@ -1,8 +1,8 @@
-# Sistema de Consulta de Stock
+# Sistema de Consulta de Stock - Distribuciones Lucero
 
 ## Overview
 
-This is a Streamlit-based stock consultation system that provides a web interface for managing and querying product inventory. The application is built using Python and Streamlit, focusing on simplicity and ease of use for stock management operations.
+This is a Streamlit-based stock consultation system for Distribuciones Lucero that provides a web interface for managing and querying product inventory. The application features dual-access authentication, automatic SFTP updates, and corporate branding with persistent configuration management.
 
 ## User Preferences
 
@@ -94,14 +94,42 @@ Preferred communication style: Simple, everyday language.
 ### Technology Choices
 - **Streamlit over Flask/Django**: Chosen for rapid development and built-in UI components suitable for data applications
 - **CSV over Database**: Selected for simplicity and ease of data management in small-scale deployments
-- **Functional over OOP**: Streamlit's paradigm favors functional programming for web apps
+- **JSON Configuration Files**: Implemented for persistent storage of application settings
+- **Corporate Branding**: Distribuciones Lucero colors and logo integrated throughout
 
 ### Architecture Benefits
-- **Simplicity**: Minimal setup and configuration required
-- **Maintainability**: Single-file application easy to understand and modify
-- **Portability**: CSV-based data storage makes the system easily portable
+- **Dual Authentication**: Admin ("stock2025") and viewer ("lucero") access levels
+- **Persistent Configuration**: Settings survive application restarts via JSON storage
+- **Automatic Updates**: SFTP integration for scheduled data synchronization
+- **Corporate Identity**: Professional appearance with company branding
+- **Real-time Search**: Instant filtering across all product fields
 
-### Current Limitations
-- **Scalability**: CSV storage not suitable for large datasets or concurrent users
-- **Security**: Hardcoded password not production-ready
-- **Persistence**: No backup or versioning system for data files
+## Recent Changes (December 2024)
+
+### Authentication System
+- Implemented dual-password system with role-based access control
+- Admin users: Full configuration and data management capabilities
+- Viewer users: Read-only access to stock consultation
+
+### SFTP Integration
+- Complete SFTP configuration interface for administrators
+- Automatic nightly updates at 2:00 AM
+- Manual update functionality with connection testing
+- Persistent SFTP credentials and settings
+
+### Data Persistence
+- Configuration persistence using JSON files in data/ directory
+- Stock thresholds, SFTP settings, and last update timestamps preserved
+- Settings survive application restarts and code updates
+
+### Corporate Branding
+- Distribuciones Lucero logo integration
+- Corporate color scheme (blue, green, red) applied throughout
+- Professional header with company branding
+- Styled metrics and interface elements with corporate identity
+
+### Current State
+- Fully functional stock consultation system
+- Ready for production deployment
+- All configurations persist between sessions
+- Corporate branding complete
