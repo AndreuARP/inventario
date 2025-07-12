@@ -502,148 +502,366 @@ def filter_dataframe(df, search_term):
     
     return df[mask]
 
+def is_mobile_view():
+    """Detectar si el usuario está en un dispositivo móvil"""
+    # En Streamlit, podemos usar los query params o crear un toggle
+    return st.session_state.get('mobile_view', False)
+
+def set_mobile_styles():
+    """Aplicar estilos CSS para vista móvil"""
+    mobile_css = """
+    <style>
+    /* Estilos base para vista móvil */
+    .compact-card {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 12px;
+        margin: 8px 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-left: 4px solid #1f77b4;
+    }
+    
+    .compact-header {
+        font-weight: bold;
+        font-size: 0.9rem;
+        margin-bottom: 4px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .compact-details {
+        font-size: 0.8rem;
+        color: #666;
+        line-height: 1.4;
+    }
+    
+    .stock-indicator {
+        font-size: 1.2rem;
+        margin-left: 8px;
+    }
+    
+    /* Responsive styles */
+    @media (max-width: 768px) {
+        .main .block-container {
+            padding-top: 1rem;
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+        
+        .stDataFrame {
+            font-size: 0.8rem;
+        }
+        
+        div[data-testid="metric-container"] {
+            background-color: rgba(28, 131, 225, 0.1);
+            border: 1px solid rgba(28, 131, 225, 0.1);
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            margin: 0.2rem 0;
+        }
+        
+        /* Hide sidebar on mobile when in mobile view */
+        .css-1d391kg {
+            display: none;
+        }
+    }
+    </style>
+    """
+    st.markdown(mobile_css, unsafe_allow_html=True)
+
+def render_mobile_card(row):
+    """Renderizar una tarjeta compacta para vista móvil"""
+    stock_indicator = get_stock_color(row['Stock'])
+    
+    card_html = f"""
+    <div class="compact-card">
+        <div class="compact-header">
+            {row['Codigo']} <span class="stock-indicator">{stock_indicator}</span>
+        </div>
+        <div class="compact-details">
+            <strong>{row['Descripcion']}</strong><br>
+            Familia: {row['Familia']} | Stock: {row['Stock']} unidades
+        </div>
+    </div>
+    """
+    return card_html
+
+def display_mobile_results(df, search_term=""):
+    """Mostrar resultados en formato móvil compacto"""
+    if df.empty:
+        st.warning("🔍 No se encontraron productos que coincidan con la búsqueda.")
+        return
+    
+    # Información de resultados en formato compacto
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("📊 Encontrados", len(df))
+    with col2:
+        # Botón de exportar compacto
+        csv_export = df.to_csv(index=False)
+        st.download_button(
+            label="📥 Exportar",
+            data=csv_export,
+            file_name=f"stock_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
+    
+    st.markdown("---")
+    
+    # Renderizar tarjetas
+    cards_html = ""
+    for _, row in df.iterrows():
+        cards_html += render_mobile_card(row)
+    
+    st.markdown(cards_html, unsafe_allow_html=True)
+    
+    # Leyenda compacta
+    st.markdown("""
+    **Stock:** 🟢 Alto (20+) | 🟡 Medio (6-20) | 🔴 Bajo (≤5)
+    """)
+
+def display_desktop_results(df, search_term=""):
+    """Mostrar resultados en formato de escritorio (tabla completa)"""
+    if df.empty:
+        st.warning("🔍 No se encontraron productos que coincidan con la búsqueda.")
+        return
+    
+    # Información de resultados
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("📊 Productos Encontrados", len(df))
+    with col2:
+        if search_term:
+            st.metric("📋 Total en Base", len(df))
+    with col3:
+        # Botón de exportar
+        csv_export = df.to_csv(index=False)
+        st.download_button(
+            label="📥 Exportar Resultados",
+            data=csv_export,
+            file_name=f"stock_productos_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv",
+            help="Descargar resultados en formato CSV"
+        )
+    
+    st.markdown("---")
+    
+    # Preparar datos para mostrar con indicadores de stock
+    display_df = df.copy()
+    display_df['Indicador'] = display_df['Stock'].apply(get_stock_color)
+    
+    # Reordenar columnas
+    display_df = display_df[['Indicador', 'Codigo', 'Descripcion', 'Familia', 'Stock']]
+    
+    # Configurar la tabla
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Indicador": st.column_config.TextColumn(
+                "Estado",
+                help="🟢 Stock Alto | 🟡 Stock Medio | 🔴 Stock Bajo",
+                width="small"
+            ),
+            "Codigo": st.column_config.TextColumn(
+                "Código",
+                width="medium"
+            ),
+            "Descripcion": st.column_config.TextColumn(
+                "Descripción",
+                width="large"
+            ),
+            "Familia": st.column_config.TextColumn(
+                "Familia",
+                width="medium"
+            ),
+            "Stock": st.column_config.NumberColumn(
+                "Stock",
+                width="small",
+                format="%d"
+            )
+        }
+    )
+    
+    # Leyenda de colores
+    st.markdown("---")
+    st.markdown("""
+    **Leyenda de Stock:**
+    - 🟢 **Stock Alto:** Más de 20 unidades
+    - 🟡 **Stock Medio:** Entre 6 y 20 unidades  
+    - 🔴 **Stock Bajo:** 5 unidades o menos
+    """)
+
 def main():
     """Función principal de la aplicación"""
     # Verificar contraseña
     if not check_password():
         return
     
-    # Título principal
-    st.title("📦 Sistema de Consulta de Stock")
+    # Aplicar estilos móviles
+    set_mobile_styles()
+    
+    # Toggle para vista móvil en la parte superior
+    col1, col2, col3 = st.columns([3, 1, 1])
+    with col1:
+        st.title("📦 Sistema de Consulta de Stock")
+    with col3:
+        mobile_toggle = st.toggle("📱 Vista Móvil", value=is_mobile_view())
+        if mobile_toggle != st.session_state.get('mobile_view', False):
+            st.session_state.mobile_view = mobile_toggle
+            st.rerun()
+    
     st.markdown("---")
     
-    # Sidebar para carga de archivos
-    with st.sidebar:
-        st.header("🔧 Administración")
+    # Sidebar adaptativo para carga de archivos
+    if is_mobile_view():
+        # En vista móvil, mostrar administración en un expander
+        with st.expander("🔧 Administración y Configuración", expanded=False):
+            # Botón de cerrar sesión
+            if st.button("🚪 Cerrar Sesión", type="secondary"):
+                st.session_state.password_correct = False
+                st.rerun()
+            
+            st.markdown("---")
+            show_admin_content()
+    else:
+        # Vista escritorio: sidebar normal
+        with st.sidebar:
+            st.header("🔧 Administración")
+            
+            # Botón de cerrar sesión
+            if st.button("🚪 Cerrar Sesión", type="secondary"):
+                st.session_state.password_correct = False
+                st.rerun()
+            
+            st.markdown("---")
+            show_admin_content()
+
+def show_admin_content():
+    """Mostrar contenido de administración (para reutilizar en sidebar y móvil)"""
+    # Sección de carga de archivos
+    st.subheader("📂 Actualizar Datos")
+    
+    # Tabs para diferentes métodos de carga
+    tab1, tab2, tab3, tab4 = st.tabs(["📁 Archivo Local", "🌐 Servidor FTP", "🔐 Servidor SFTP", "🔗 URL Directa"])
+    
+    with tab1:
+        uploaded_file = st.file_uploader(
+            "Cargar archivo CSV:",
+            type=['csv'],
+            help="El archivo debe contener las columnas: Codigo, Descripcion, Familia, Stock"
+        )
         
-        # Botón de cerrar sesión
-        if st.button("🚪 Cerrar Sesión", type="secondary"):
-            st.session_state.password_correct = False
-            st.rerun()
+        if uploaded_file is not None:
+            # Leer contenido del archivo
+            content = uploaded_file.read().decode('utf-8')
+            
+            # Validar contenido
+            is_valid, result = validate_csv_content(content)
+            
+            if is_valid:
+                st.success("✅ Archivo válido")
+                
+                if st.button("💾 Actualizar Base de Datos", type="primary", key="local_update"):
+                    if save_data(result):
+                        st.success("🎉 ¡Datos actualizados exitosamente!")
+                        st.rerun()
+            else:
+                st.error(f"❌ {result}")
+    
+    with tab2:
+        st.markdown("**Configuración del Servidor FTP:**")
         
-        st.markdown("---")
+        # Información de ayuda  
+        with st.expander("💡 Ayuda con Configuración FTP"):
+            st.markdown("""
+            **Ejemplos de configuración común:**
+            
+            - **Servidor FTP estándar:**
+              - Puerto: 21 (por defecto)
+              - Ruta archivo: `/ruta/completa/productos.csv`
+            
+            - **Servidor SFTP:**
+              - Puerto: 22 (usar puerto SFTP si aplica)
+              
+            - **Servidores de hosting:**
+              - Host: `ftp.tudominio.com` o IP del servidor
+              - Usuario: tu usuario FTP
+              - Ruta: `/public_html/data/productos.csv`
+            
+            **Problemas comunes y soluciones:**
+            - ❌ "Connection refused": Revisar host y puerto
+            - ❌ "Authentication failed": Verificar usuario/contraseña
+            - ❌ "File not found": Confirmar ruta completa del archivo
+            - ❌ "Timeout": Probar modo activo/pasivo o usar URL directa
+            - ❌ "No se puede alcanzar": Firewall o red bloqueando conexión
+            
+            **💡 Alternativa recomendada:**
+            Si FTP sigue fallando, use la pestaña "URL Directa" que es más compatible con firewalls y redes empresariales.
+            """)
         
-        # Sección de carga de archivos
-        st.subheader("📂 Actualizar Datos")
+        # Inicializar configuración FTP en session state
+        if 'ftp_config' not in st.session_state:
+            st.session_state.ftp_config = {
+                'host': '',
+                'port': 21,
+                'user': '',
+                'file_path': ''
+            }
         
-        # Tabs para diferentes métodos de carga
-        tab1, tab2, tab3, tab4 = st.tabs(["📁 Archivo Local", "🌐 Servidor FTP", "🔐 Servidor SFTP", "🔗 URL Directa"])
+        # Inicializar configuración SFTP en session state  
+        if 'sftp_config' not in st.session_state:
+            st.session_state.sftp_config = {
+                'host': 'home567855122.1and1-data.host',
+                'port': 22,
+                'user': 'acc1195143440',
+                'file_path': '/stock/stock.csv',
+                'timeout': 30
+            }
         
-        with tab1:
-            uploaded_file = st.file_uploader(
-                "Cargar archivo CSV:",
-                type=['csv'],
-                help="El archivo debe contener las columnas: Codigo, Descripcion, Familia, Stock"
+        with st.form("ftp_form"):
+            ftp_host = st.text_input(
+                "Servidor FTP:", 
+                value=st.session_state.ftp_config['host'],
+                placeholder="ftp.ejemplo.com"
+            )
+            ftp_port = st.number_input(
+                "Puerto:", 
+                value=st.session_state.ftp_config['port'], 
+                min_value=1, 
+                max_value=65535
+            )
+            ftp_user = st.text_input(
+                "Usuario:", 
+                value=st.session_state.ftp_config['user'],
+                placeholder="usuario"
+            )
+            ftp_password = st.text_input(
+                "Contraseña:", 
+                type="password",
+                help="La contraseña se guardará de forma segura para actualizaciones automáticas"
+            )
+            ftp_file_path = st.text_input(
+                "Ruta del archivo:", 
+                value=st.session_state.ftp_config['file_path'],
+                placeholder="/data/productos.csv"
             )
             
-            if uploaded_file is not None:
-                # Leer contenido del archivo
-                content = uploaded_file.read().decode('utf-8')
-                
-                # Validar contenido
-                is_valid, result = validate_csv_content(content)
-                
-                if is_valid:
-                    st.success("✅ Archivo válido")
-                    
-                    if st.button("💾 Actualizar Base de Datos", type="primary", key="local_update"):
-                        if save_data(result):
-                            st.success("🎉 ¡Datos actualizados exitosamente!")
-                            st.rerun()
-                else:
-                    st.error(f"❌ {result}")
-        
-        with tab2:
-            st.markdown("**Configuración del Servidor FTP:**")
-            
-            # Información de ayuda
-            with st.expander("💡 Ayuda con Configuración FTP"):
-                st.markdown("""
-                **Ejemplos de configuración común:**
-                
-                - **Servidor FTP estándar:**
-                  - Puerto: 21 (por defecto)
-                  - Ruta archivo: `/ruta/completa/productos.csv`
-                
-                - **Servidor SFTP:**
-                  - Puerto: 22 (usar puerto SFTP si aplica)
-                  
-                - **Servidores de hosting:**
-                  - Host: `ftp.tudominio.com` o IP del servidor
-                  - Usuario: tu usuario FTP
-                  - Ruta: `/public_html/data/productos.csv`
-                
-                **Problemas comunes y soluciones:**
-                - ❌ "Connection refused": Revisar host y puerto
-                - ❌ "Authentication failed": Verificar usuario/contraseña
-                - ❌ "File not found": Confirmar ruta completa del archivo
-                - ❌ "Timeout": Probar modo activo/pasivo o usar URL directa
-                - ❌ "No se puede alcanzar": Firewall o red bloqueando conexión
-                
-                **💡 Alternativa recomendada:**
-                Si FTP sigue fallando, use la pestaña "URL Directa" que es más compatible con firewalls y redes empresariales.
-                """)
-            
-            # Inicializar configuración FTP en session state
-            if 'ftp_config' not in st.session_state:
-                st.session_state.ftp_config = {
-                    'host': '',
-                    'port': 21,
-                    'user': '',
-                    'file_path': ''
-                }
-            
-            # Inicializar configuración SFTP en session state  
-            if 'sftp_config' not in st.session_state:
-                st.session_state.sftp_config = {
-                    'host': 'home567855122.1and1-data.host',
-                    'port': 22,
-                    'user': 'acc1195143440',
-                    'file_path': '/stock/stock.csv',
-                    'timeout': 30
-                }
-            
-            with st.form("ftp_form"):
-                ftp_host = st.text_input(
-                    "Servidor FTP:", 
-                    value=st.session_state.ftp_config['host'],
-                    placeholder="ftp.ejemplo.com"
+            # Opciones avanzadas
+            with st.expander("⚙️ Configuración Avanzada"):
+                passive_mode = st.checkbox(
+                    "Modo Pasivo (recomendado para firewalls)", 
+                    value=True,
+                    help="El modo pasivo resuelve problemas de conexión en la mayoría de casos"
                 )
-                ftp_port = st.number_input(
-                    "Puerto:", 
-                    value=st.session_state.ftp_config['port'], 
-                    min_value=1, 
-                    max_value=65535
+                connection_timeout = st.slider(
+                    "Timeout de conexión (segundos):", 
+                    min_value=5, 
+                    max_value=60, 
+                    value=30
                 )
-                ftp_user = st.text_input(
-                    "Usuario:", 
-                    value=st.session_state.ftp_config['user'],
-                    placeholder="usuario"
-                )
-                ftp_password = st.text_input(
-                    "Contraseña:", 
-                    type="password",
-                    help="La contraseña se guardará de forma segura para actualizaciones automáticas"
-                )
-                ftp_file_path = st.text_input(
-                    "Ruta del archivo:", 
-                    value=st.session_state.ftp_config['file_path'],
-                    placeholder="/data/productos.csv"
-                )
-                
-                # Opciones avanzadas
-                with st.expander("⚙️ Configuración Avanzada"):
-                    passive_mode = st.checkbox(
-                        "Modo Pasivo (recomendado para firewalls)", 
-                        value=True,
-                        help="El modo pasivo resuelve problemas de conexión en la mayoría de casos"
-                    )
-                    connection_timeout = st.slider(
-                        "Timeout de conexión (segundos):", 
-                        min_value=5, 
-                        max_value=60, 
-                        value=30
-                    )
                 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -1073,95 +1291,41 @@ def main():
         st.warning("⚠️ No hay datos disponibles. Cargue un archivo CSV para comenzar.")
         return
     
-    # Barra de búsqueda
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
+    # Barra de búsqueda adaptativa
+    if is_mobile_view():
+        # Vista móvil: búsqueda en toda la pantalla
         search_term = st.text_input(
-            "🔍 Buscar productos:",
-            placeholder="Buscar por código, descripción, familia o stock...",
-            help="La búsqueda es en tiempo real y busca en todos los campos"
+            "🔍 Buscar:",
+            placeholder="Código, descripción, familia...",
+            help="Búsqueda en tiempo real"
         )
-    
-    with col2:
-        st.markdown("<br>", unsafe_allow_html=True)  # Espaciado
-        clear_search = st.button("🗑️ Limpiar", help="Limpiar búsqueda")
-        if clear_search:
+        if st.button("🗑️ Limpiar"):
             st.rerun()
+    else:
+        # Vista escritorio: búsqueda en columnas
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            search_term = st.text_input(
+                "🔍 Buscar productos:",
+                placeholder="Buscar por código, descripción, familia o stock...",
+                help="La búsqueda es en tiempo real y busca en todos los campos"
+            )
+        
+        with col2:
+            st.markdown("<br>", unsafe_allow_html=True)  # Espaciado
+            clear_search = st.button("🗑️ Limpiar", help="Limpiar búsqueda")
+            if clear_search:
+                st.rerun()
     
     # Filtrar datos
     filtered_df = filter_dataframe(df, search_term)
     
-    # Mostrar resultados
-    if filtered_df.empty:
-        st.warning("🔍 No se encontraron productos que coincidan con la búsqueda.")
+    # Mostrar resultados según el modo de vista
+    if is_mobile_view():
+        display_mobile_results(filtered_df, search_term)
     else:
-        # Información de resultados
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("📊 Productos Encontrados", len(filtered_df))
-        with col2:
-            if search_term:
-                st.metric("📋 Total en Base", len(df))
-        with col3:
-            # Botón de exportar
-            csv_export = filtered_df.to_csv(index=False)
-            st.download_button(
-                label="📥 Exportar Resultados",
-                data=csv_export,
-                file_name=f"stock_productos_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-                help="Descargar resultados en formato CSV"
-            )
-        
-        st.markdown("---")
-        
-        # Preparar datos para mostrar con indicadores de stock
-        display_df = filtered_df.copy()
-        display_df['Indicador'] = display_df['Stock'].apply(get_stock_color)
-        
-        # Reordenar columnas
-        display_df = display_df[['Indicador', 'Codigo', 'Descripcion', 'Familia', 'Stock']]
-        
-        # Configurar la tabla
-        st.dataframe(
-            display_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Indicador": st.column_config.TextColumn(
-                    "Estado",
-                    help="🟢 Stock Alto | 🟡 Stock Medio | 🔴 Stock Bajo",
-                    width="small"
-                ),
-                "Codigo": st.column_config.TextColumn(
-                    "Código",
-                    width="medium"
-                ),
-                "Descripcion": st.column_config.TextColumn(
-                    "Descripción",
-                    width="large"
-                ),
-                "Familia": st.column_config.TextColumn(
-                    "Familia",
-                    width="medium"
-                ),
-                "Stock": st.column_config.NumberColumn(
-                    "Stock",
-                    width="small",
-                    format="%d"
-                )
-            }
-        )
-        
-        # Leyenda de colores
-        st.markdown("---")
-        st.markdown("""
-        **Leyenda de Stock:**
-        - 🟢 **Stock Alto:** Más de 20 unidades
-        - 🟡 **Stock Medio:** Entre 6 y 20 unidades  
-        - 🔴 **Stock Bajo:** 5 unidades o menos
-        """)
+        display_desktop_results(filtered_df, search_term)
 
 def initialize_auto_scheduler():
     """Inicializar el programador automático al cargar la aplicación"""
