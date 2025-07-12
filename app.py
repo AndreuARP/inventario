@@ -14,11 +14,120 @@ import json
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Sistema de Consulta de Stock",
+    page_title="Distribuciones Lucero - Sistema de Stock",
     page_icon="📦",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# CSS personalizado con colores corporativos de Distribuciones Lucero
+st.markdown("""
+<style>
+    /* Colores corporativos Distribuciones Lucero */
+    :root {
+        --lucero-blue: #1f4e79;
+        --lucero-green: #7cb518;
+        --lucero-red: #e31e24;
+        --lucero-light-blue: #4a90b8;
+    }
+    
+    /* Header personalizado */
+    .main-header {
+        background: linear-gradient(90deg, var(--lucero-blue) 0%, var(--lucero-light-blue) 100%);
+        padding: 1rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+        text-align: center;
+    }
+    
+    .main-header h1 {
+        color: white;
+        margin: 0;
+        font-size: 2.5rem;
+        font-weight: 700;
+    }
+    
+    .main-header .subtitle {
+        color: #f0f0f0;
+        font-size: 1.1rem;
+        margin-top: 0.5rem;
+    }
+    
+    /* Botones principales */
+    .stButton > button[kind="primary"] {
+        background-color: var(--lucero-green);
+        border-color: var(--lucero-green);
+        color: white;
+    }
+    
+    .stButton > button[kind="primary"]:hover {
+        background-color: #6a9c15;
+        border-color: #6a9c15;
+    }
+    
+    /* Botones secundarios */
+    .stButton > button[kind="secondary"] {
+        background-color: var(--lucero-red);
+        border-color: var(--lucero-red);
+        color: white;
+    }
+    
+    .stButton > button[kind="secondary"]:hover {
+        background-color: #c21a1f;
+        border-color: #c21a1f;
+    }
+    
+    /* Métricas */
+    .metric-container {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid var(--lucero-blue);
+    }
+    
+    /* Sidebar */
+    .css-1d391kg {
+        background-color: #f8f9fa;
+    }
+    
+    /* Expandibles */
+    .streamlit-expanderHeader {
+        background-color: var(--lucero-blue);
+        color: white;
+    }
+    
+    /* Success messages */
+    .stSuccess {
+        background-color: rgba(124, 181, 24, 0.1);
+        border-color: var(--lucero-green);
+    }
+    
+    /* Error messages */
+    .stError {
+        background-color: rgba(227, 30, 36, 0.1);
+        border-color: var(--lucero-red);
+    }
+    
+    /* Indicadores de stock */
+    .stock-indicator {
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+    
+    /* Logo container */
+    .logo-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1rem;
+    }
+    
+    .logo-container img {
+        max-height: 80px;
+        margin-right: 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Constantes
 PASSWORD = "stock2025"
@@ -31,8 +140,12 @@ def check_password():
         st.session_state.password_correct = False
     
     if not st.session_state.password_correct:
-        st.title("🔐 Acceso al Sistema de Stock")
-        st.markdown("---")
+        # Logo y título de acceso
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if os.path.exists("assets/logo.gif"):
+                st.image("assets/logo.gif", width=300)
+            st.markdown('<div class="main-header"><h1>🔐 Acceso al Sistema</h1><div class="subtitle">Sistema de Consulta de Stock</div></div>', unsafe_allow_html=True)
         
         password = st.text_input(
             "Ingrese la contraseña para acceder:",
@@ -316,17 +429,32 @@ def main():
     # Inicializar configuración persistente
     initialize_session_config()
     
-    # Título principal
-    st.title("📦 Sistema de Consulta de Stock")
-    st.markdown("---")
+    # Header principal con logo corporativo
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        if os.path.exists("assets/logo.gif"):
+            st.image("assets/logo.gif", width=180)
+    with col2:
+        st.markdown("""
+        <div class="main-header">
+            <h1>📦 Sistema de Consulta de Stock</h1>
+            <div class="subtitle">Distribuciones Lucero - Gestión de Inventario</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Sidebar
     with st.sidebar:
+        # Logo en sidebar
+        if os.path.exists("assets/logo.gif"):
+            st.image("assets/logo.gif", width=200)
+        
         user_type = st.session_state.get("user_type", "admin")
         if user_type == "admin":
-            st.header("🔧 Administración")
+            st.markdown("### 🔧 Panel de Administración")
+            st.markdown("**Distribuciones Lucero**")
         else:
-            st.header("👁️ Consulta")
+            st.markdown("### 👁️ Panel de Consulta")
+            st.markdown("**Distribuciones Lucero**")
         
         if st.button("🚪 Cerrar Sesión", type="secondary"):
             st.session_state.password_correct = False
@@ -483,14 +611,40 @@ def main():
             st.markdown(f"🟢 Stock Alto: >{high_val} unidades")
         
         st.markdown("---")
-        st.subheader("ℹ️ Información")
+        st.markdown("### 📊 Resumen de Inventario")
         df = load_data()
-        st.metric("Total de Productos", len(df))
+        
+        # Métricas con estilo corporativo
+        st.markdown(f"""
+        <div class="metric-container">
+            <h4 style="color: var(--lucero-blue); margin: 0;">📦 Total de Productos</h4>
+            <h2 style="color: var(--lucero-blue); margin: 0.5rem 0;">{len(df)}</h2>
+        </div>
+        """, unsafe_allow_html=True)
         
         if not df.empty:
             low_threshold = st.session_state.get('stock_low_threshold', 5)
-            stock_bajo = len(df[pd.to_numeric(df['Stock'], errors='coerce') <= low_threshold])
-            st.metric(f"🔴 Stock Bajo (≤{low_threshold})", stock_bajo)
+            high_threshold = st.session_state.get('stock_high_threshold', 20)
+            
+            # Calcular stocks por categorías
+            stock_numbers = pd.to_numeric(df['Stock'], errors='coerce')
+            stock_bajo = len(df[stock_numbers <= low_threshold])
+            stock_medio = len(df[(stock_numbers > low_threshold) & (stock_numbers <= high_threshold)])
+            stock_alto = len(df[stock_numbers > high_threshold])
+            
+            st.markdown(f"""
+            <div style="margin-top: 1rem;">
+                <div style="background-color: rgba(227, 30, 36, 0.1); padding: 0.8rem; border-radius: 5px; border-left: 4px solid var(--lucero-red); margin-bottom: 0.5rem;">
+                    <strong style="color: var(--lucero-red);">🔴 Stock Bajo (≤{low_threshold}): {stock_bajo}</strong>
+                </div>
+                <div style="background-color: rgba(255, 193, 7, 0.1); padding: 0.8rem; border-radius: 5px; border-left: 4px solid #ffc107; margin-bottom: 0.5rem;">
+                    <strong style="color: #d39e00;">🟡 Stock Medio ({low_threshold+1}-{high_threshold}): {stock_medio}</strong>
+                </div>
+                <div style="background-color: rgba(124, 181, 24, 0.1); padding: 0.8rem; border-radius: 5px; border-left: 4px solid var(--lucero-green);">
+                    <strong style="color: var(--lucero-green);">🟢 Stock Alto (>{high_threshold}): {stock_alto}</strong>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
     
     # Contenido principal
     df = load_data()

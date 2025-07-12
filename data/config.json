@@ -1,0 +1,13 @@
+{
+  "stock_high_threshold": 10,
+  "stock_low_threshold": 0,
+  "sftp_config": {
+    "enabled": true,
+    "host": "home567855122.1and1-data.host",
+    "port": 22,
+    "user": "acc1195143440",
+    "password": "@Q&jb@kpcU(OhpQv95bN0%eI",
+    "file_path": "/stock/stock.csv"
+  },
+  "last_update": "2025-07-12 08:10:38"
+}
