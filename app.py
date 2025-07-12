@@ -284,9 +284,24 @@ def download_from_sftp(sftp_host, sftp_user, sftp_password, sftp_file_path, sftp
         except FileNotFoundError:
             return False, f"Archivo '{sftp_file_path}' no encontrado en el servidor SFTP"
         
-        # Descargar el archivo
-        with sftp.open(sftp_file_path, 'r') as remote_file:
-            content = remote_file.read()
+        # Descargar el archivo - probar diferentes métodos
+        try:
+            # Método 1: Modo texto con UTF-8
+            with sftp.open(sftp_file_path, 'r', encoding='utf-8') as remote_file:
+                content = remote_file.read()
+        except (UnicodeDecodeError, Exception):
+            try:
+                # Método 2: Modo binario y decodificar UTF-8
+                with sftp.open(sftp_file_path, 'rb') as remote_file:
+                    content_bytes = remote_file.read()
+                    content = content_bytes.decode('utf-8')
+            except UnicodeDecodeError:
+                try:
+                    # Método 3: Probar con latin-1 
+                    content = content_bytes.decode('latin-1')
+                except:
+                    # Método 4: Forzar UTF-8 ignorando errores
+                    content = content_bytes.decode('utf-8', errors='ignore')
             
         return True, content
         
@@ -812,6 +827,14 @@ def main():
                             success, result = download_from_sftp(sftp_host, sftp_user, sftp_password, sftp_file_path, sftp_port, sftp_timeout)
                             
                             if success:
+                                # Mostrar información de depuración
+                                st.info(f"📄 Archivo descargado ({len(result)} caracteres)")
+                                
+                                # Mostrar una muestra del contenido
+                                with st.expander("🔍 Vista previa del archivo descargado"):
+                                    preview = result[:500] + "..." if len(result) > 500 else result
+                                    st.text(preview)
+                                
                                 is_valid, csv_result = validate_csv_content(result)
                                 if is_valid:
                                     st.success("✅ Archivo descargado desde SFTP correctamente")
@@ -823,6 +846,8 @@ def main():
                                             st.rerun()
                                 else:
                                     st.error(f"❌ Error en el archivo descargado: {csv_result}")
+                                    # Mostrar información adicional para debug
+                                    st.info("💡 Verifique que el archivo tenga las columnas: Codigo, Descripcion, Familia, Stock")
                             else:
                                 st.error(f"❌ {result}")
                     else:
