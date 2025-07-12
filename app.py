@@ -10,6 +10,7 @@ import schedule
 from io import StringIO
 import requests
 from datetime import datetime
+import json
 
 # Configuración de la página
 st.set_page_config(
@@ -22,6 +23,7 @@ st.set_page_config(
 # Constantes
 PASSWORD = "stock2025"
 CSV_FILE_PATH = "data/productos.csv"
+CONFIG_FILE_PATH = "data/config.json"
 
 def check_password():
     """Función para verificar la contraseña de acceso"""
@@ -87,6 +89,65 @@ def save_data(df):
     except Exception as e:
         st.error(f"❌ Error al guardar los datos: {str(e)}")
         return False
+
+def load_config():
+    """Cargar configuración desde archivo JSON"""
+    default_config = {
+        'stock_high_threshold': 20,
+        'stock_low_threshold': 5,
+        'sftp_config': {
+            'enabled': False,
+            'host': 'home567855122.1and1-data.host',
+            'port': 22,
+            'user': 'acc1195143440',
+            'password': '@Q&jb@kpcU(OhpQv95bN0%eI',
+            'file_path': '/stock/stock.csv'
+        },
+        'last_update': None
+    }
+    
+    try:
+        if os.path.exists(CONFIG_FILE_PATH):
+            with open(CONFIG_FILE_PATH, 'r', encoding='utf-8') as f:
+                saved_config = json.load(f)
+                # Merge with defaults to ensure all keys exist
+                for key, value in default_config.items():
+                    if key not in saved_config:
+                        saved_config[key] = value
+                    elif key == 'sftp_config' and isinstance(value, dict):
+                        for sftp_key, sftp_value in value.items():
+                            if sftp_key not in saved_config[key]:
+                                saved_config[key][sftp_key] = sftp_value
+                return saved_config
+        else:
+            return default_config
+    except Exception as e:
+        print(f"Error loading config: {str(e)}")
+        return default_config
+
+def save_config(config):
+    """Guardar configuración en archivo JSON"""
+    try:
+        os.makedirs("data", exist_ok=True)
+        with open(CONFIG_FILE_PATH, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        print(f"Error saving config: {str(e)}")
+        return False
+
+def initialize_session_config():
+    """Inicializar configuración en session state desde archivo"""
+    if 'config_initialized' not in st.session_state:
+        st.session_state.config_initialized = True
+        config = load_config()
+        
+        # Cargar configuraciones en session state
+        st.session_state.stock_high_threshold = config['stock_high_threshold']
+        st.session_state.stock_low_threshold = config['stock_low_threshold']
+        st.session_state.sftp_config = config['sftp_config']
+        if config['last_update']:
+            st.session_state.last_update = config['last_update']
 
 def get_stock_color(stock):
     """Obtener color para el indicador de stock"""
@@ -200,24 +261,27 @@ def test_sftp_connection(sftp_host, sftp_user, sftp_password, sftp_port=22, time
 def auto_update_from_sftp():
     """Función para actualización automática desde SFTP"""
     try:
-        if 'sftp_config' not in st.session_state or not st.session_state.sftp_config.get('enabled', False):
+        config = load_config()
+        if not config['sftp_config'].get('enabled', False):
             return
         
-        config = st.session_state.sftp_config
+        sftp_config = config['sftp_config']
         success, content, message = download_from_sftp(
-            config['host'],
-            config['user'],
-            config['password'],
-            config['file_path'],
-            config.get('port', 22)
+            sftp_config['host'],
+            sftp_config['user'],
+            sftp_config['password'],
+            sftp_config['file_path'],
+            sftp_config.get('port', 22)
         )
         
         if success:
             is_valid, result = validate_csv_content(content)
             if is_valid:
                 save_data(result)
-                st.session_state.last_update = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                print(f"Actualización automática exitosa: {st.session_state.last_update}")
+                # Actualizar y guardar la fecha de última actualización
+                config['last_update'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                save_config(config)
+                print(f"Actualización automática exitosa: {config['last_update']}")
             else:
                 print(f"Error en validación CSV: {result}")
         else:
@@ -249,6 +313,9 @@ def main():
     if not check_password():
         return
     
+    # Inicializar configuración persistente
+    initialize_session_config()
+    
     # Título principal
     st.title("📦 Sistema de Consulta de Stock")
     st.markdown("---")
@@ -269,20 +336,6 @@ def main():
         
         # Configuración para administradores
         if user_type == "admin":
-            # Inicializar configuraciones
-            if 'stock_high_threshold' not in st.session_state:
-                st.session_state.stock_high_threshold = 20
-            if 'stock_low_threshold' not in st.session_state:
-                st.session_state.stock_low_threshold = 5
-            if 'sftp_config' not in st.session_state:
-                st.session_state.sftp_config = {
-                    'enabled': False,
-                    'host': 'home567855122.1and1-data.host',
-                    'port': 22,
-                    'user': 'acc1195143440',
-                    'password': '@Q&jb@kpcU(OhpQv95bN0%eI',
-                    'file_path': '/stock/stock.csv'
-                }
             
             with st.expander("🎯 Configurar Rangos de Stock"):
                 col1, col2 = st.columns(2)
@@ -308,7 +361,14 @@ def main():
                 if st.button("💾 Guardar Configuración", key="save_stock_config"):
                     st.session_state.stock_low_threshold = low_threshold
                     st.session_state.stock_high_threshold = high_threshold
-                    st.success(f"✅ Configuración guardada")
+                    
+                    # Guardar en archivo persistente
+                    config = load_config()
+                    config['stock_low_threshold'] = low_threshold
+                    config['stock_high_threshold'] = high_threshold
+                    save_config(config)
+                    
+                    st.success(f"✅ Configuración guardada permanentemente")
                     st.rerun()
                 
                 st.info(f"📊 Actual: 🔴≤{st.session_state.stock_low_threshold} | 🟡{st.session_state.stock_low_threshold+1}-{st.session_state.stock_high_threshold} | 🟢>{st.session_state.stock_high_threshold}")
@@ -340,7 +400,7 @@ def main():
                 
                 with col_save:
                     if st.button("💾 Guardar Config. SFTP", key="save_sftp_config"):
-                        st.session_state.sftp_config = {
+                        new_sftp_config = {
                             'enabled': sftp_enabled,
                             'host': sftp_host,
                             'port': sftp_port,
@@ -348,7 +408,14 @@ def main():
                             'password': sftp_password,
                             'file_path': sftp_file_path
                         }
-                        st.success("✅ Configuración SFTP guardada")
+                        st.session_state.sftp_config = new_sftp_config
+                        
+                        # Guardar en archivo persistente
+                        config = load_config()
+                        config['sftp_config'] = new_sftp_config
+                        save_config(config)
+                        
+                        st.success("✅ Configuración SFTP guardada permanentemente")
                         st.rerun()
                 
                 if st.button("🔄 Actualizar Ahora desde SFTP", key="manual_sftp_update"):
@@ -359,7 +426,12 @@ def main():
                             is_valid, result = validate_csv_content(content)
                             if is_valid:
                                 if save_data(result):
-                                    st.session_state.last_update = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                    # Guardar fecha de actualización persistente
+                                    config = load_config()
+                                    config['last_update'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                    save_config(config)
+                                    st.session_state.last_update = config['last_update']
+                                    
                                     st.success(f"🎉 ¡Datos actualizados desde SFTP exitosamente!")
                                     st.rerun()
                                 else:
