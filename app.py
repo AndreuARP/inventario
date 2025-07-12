@@ -85,28 +85,92 @@ def save_data(df):
 
 def download_from_ftp(ftp_host, ftp_user, ftp_password, ftp_file_path, ftp_port=21):
     """Descargar archivo CSV desde servidor FTP"""
+    ftp = None
     try:
+        # Validar parámetros
+        if not all([ftp_host, ftp_user, ftp_password, ftp_file_path]):
+            return False, "Faltan parámetros de conexión FTP"
+        
         # Conectar al servidor FTP
         ftp = ftplib.FTP()
-        ftp.connect(ftp_host, ftp_port)
-        ftp.login(ftp_user, ftp_password)
+        ftp.set_debuglevel(0)  # Desactivar debug para producción
+        
+        # Intentar conexión
+        try:
+            ftp.connect(ftp_host, ftp_port, timeout=30)
+        except Exception as e:
+            return False, f"No se pudo conectar al servidor {ftp_host}:{ftp_port} - {str(e)}"
+        
+        # Intentar login
+        try:
+            ftp.login(ftp_user, ftp_password)
+        except Exception as e:
+            return False, f"Error de autenticación para usuario '{ftp_user}' - {str(e)}"
+        
+        # Verificar que el archivo existe
+        try:
+            ftp.size(ftp_file_path)
+        except Exception as e:
+            return False, f"Archivo '{ftp_file_path}' no encontrado en el servidor - {str(e)}"
         
         # Descargar el archivo
         csv_content = []
-        ftp.retrlines(f'RETR {ftp_file_path}', csv_content.append)
+        try:
+            ftp.retrlines(f'RETR {ftp_file_path}', csv_content.append)
+        except Exception as e:
+            return False, f"Error al descargar el archivo '{ftp_file_path}' - {str(e)}"
         
-        # Cerrar conexión
-        ftp.quit()
+        # Verificar que se descargó contenido
+        if not csv_content:
+            return False, "El archivo descargado está vacío"
         
         # Unir las líneas del archivo
         csv_string = '\n'.join(csv_content)
         
         return True, csv_string
         
-    except ftplib.all_errors as e:
-        return False, f"Error de FTP: {str(e)}"
     except Exception as e:
-        return False, f"Error general: {str(e)}"
+        return False, f"Error inesperado: {str(e)}"
+    finally:
+        # Cerrar conexión de forma segura
+        if ftp:
+            try:
+                ftp.quit()
+            except:
+                try:
+                    ftp.close()
+                except:
+                    pass
+
+def test_ftp_connection(ftp_host, ftp_user, ftp_password, ftp_port=21):
+    """Probar la conectividad FTP sin descargar archivos"""
+    ftp = None
+    try:
+        ftp = ftplib.FTP()
+        ftp.set_debuglevel(0)
+        
+        # Probar conexión
+        ftp.connect(ftp_host, ftp_port, timeout=10)
+        
+        # Probar login
+        ftp.login(ftp_user, ftp_password)
+        
+        # Obtener directorio actual para confirmar que funciona
+        current_dir = ftp.pwd()
+        
+        return True, f"Conexión exitosa. Directorio actual: {current_dir}"
+        
+    except Exception as e:
+        return False, f"Error de conexión: {str(e)}"
+    finally:
+        if ftp:
+            try:
+                ftp.quit()
+            except:
+                try:
+                    ftp.close()
+                except:
+                    pass
 
 def auto_update_from_ftp():
     """Función para actualización automática desde FTP"""
@@ -263,6 +327,30 @@ def main():
         with tab2:
             st.markdown("**Configuración del Servidor FTP:**")
             
+            # Información de ayuda
+            with st.expander("💡 Ayuda con Configuración FTP"):
+                st.markdown("""
+                **Ejemplos de configuración común:**
+                
+                - **Servidor FTP estándar:**
+                  - Puerto: 21 (por defecto)
+                  - Ruta archivo: `/ruta/completa/productos.csv`
+                
+                - **Servidor SFTP:**
+                  - Puerto: 22 (usar puerto SFTP si aplica)
+                  
+                - **Servidores de hosting:**
+                  - Host: `ftp.tudominio.com` o IP del servidor
+                  - Usuario: tu usuario FTP
+                  - Ruta: `/public_html/data/productos.csv`
+                
+                **Problemas comunes:**
+                - ❌ "Connection refused": Revisar host y puerto
+                - ❌ "Authentication failed": Verificar usuario/contraseña
+                - ❌ "File not found": Confirmar ruta completa del archivo
+                - ❌ "Timeout": El servidor puede estar inaccesible
+                """)
+            
             # Inicializar configuración FTP en session state
             if 'ftp_config' not in st.session_state:
                 st.session_state.ftp_config = {
@@ -300,10 +388,12 @@ def main():
                     placeholder="/data/productos.csv"
                 )
                 
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns(3)
                 with col1:
                     save_config = st.form_submit_button("💾 Guardar Configuración")
                 with col2:
+                    test_connection = st.form_submit_button("🔧 Probar Conexión")
+                with col3:
                     download_ftp = st.form_submit_button("🔄 Descargar desde FTP", type="primary")
                 
                 if save_config:
@@ -317,6 +407,17 @@ def main():
                         st.session_state.ftp_password = ftp_password
                     st.success("✅ Configuración FTP guardada")
                     st.rerun()
+                
+                if test_connection:
+                    if all([ftp_host, ftp_user, ftp_password]):
+                        with st.spinner("Probando conexión FTP..."):
+                            success, message = test_ftp_connection(ftp_host, ftp_user, ftp_password, ftp_port)
+                            if success:
+                                st.success(f"✅ {message}")
+                            else:
+                                st.error(f"❌ {message}")
+                    else:
+                        st.error("❌ Complete todos los campos para probar la conexión")
                 
                 if download_ftp:
                     if all([ftp_host, ftp_user, ftp_password, ftp_file_path]):
