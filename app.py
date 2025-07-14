@@ -371,14 +371,32 @@ def test_sftp_connection(sftp_host, sftp_user, sftp_password, sftp_port=22, time
     except Exception as e:
         return False, f"Error en conexión SFTP: {str(e)}"
 
+def log_message(message):
+    """Escribir mensaje de log con timestamp"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_entry = f"[{timestamp}] {message}\n"
+    
+    try:
+        os.makedirs("data", exist_ok=True)
+        with open("data/scheduler.log", "a", encoding="utf-8") as f:
+            f.write(log_entry)
+        print(log_entry.strip())
+    except Exception as e:
+        print(f"Error writing log: {e}")
+
 def auto_update_from_sftp():
     """Función para actualización automática desde SFTP"""
     try:
+        log_message("🔄 Iniciando actualización automática SFTP...")
+        
         config = load_config()
         if not config['sftp_config'].get('enabled', False):
+            log_message("⚠️ Actualizaciones automáticas deshabilitadas")
             return
         
         sftp_config = config['sftp_config']
+        log_message(f"📡 Conectando a {sftp_config['host']}...")
+        
         success, content, message = download_from_sftp(
             sftp_config['host'],
             sftp_config['user'],
@@ -388,38 +406,96 @@ def auto_update_from_sftp():
         )
         
         if success:
+            log_message("✅ Archivo descargado exitosamente")
             is_valid, result = validate_csv_content(content)
             if is_valid:
                 save_data(result)
                 # Actualizar y guardar la fecha de última actualización
                 config['last_update'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 save_config(config)
-                print(f"Actualización automática exitosa: {config['last_update']}")
+                log_message(f"🎉 Actualización automática exitosa: {config['last_update']}")
+                log_message(f"📊 Productos actualizados: {len(result)}")
             else:
-                print(f"Error en validación CSV: {result}")
+                log_message(f"❌ Error en validación CSV: {result}")
         else:
-            print(f"Error en actualización automática: {message}")
+            log_message(f"❌ Error en descarga SFTP: {message}")
             
     except Exception as e:
-        print(f"Error en actualización automática: {str(e)}")
+        log_message(f"💥 Error crítico en actualización automática: {str(e)}")
 
 def schedule_worker():
     """Worker que ejecuta las tareas programadas"""
+    log_message("🚀 Scheduler worker iniciado - próxima ejecución: 02:00 AM")
+    
     while True:
-        schedule.run_pending()
-        time.sleep(60)
+        try:
+            # Ejecutar tareas pendientes
+            schedule.run_pending()
+            
+            # Log del estado cada hora para verificar que está funcionando
+            current_hour = datetime.now().hour
+            if current_hour == 0:  # Medianoche
+                log_message("⏰ Scheduler activo - próxima actualización en 2 horas")
+            
+            time.sleep(60)  # Revisar cada minuto
+            
+        except Exception as e:
+            log_message(f"💥 Error en scheduler worker: {str(e)}")
+            time.sleep(300)  # Esperar 5 minutos antes de reintentar
 
 def initialize_auto_scheduler():
     """Inicializar el programador automático al cargar la aplicación"""
-    if 'scheduler_initialized' not in st.session_state:
-        st.session_state.scheduler_initialized = True
+    # Usar un enfoque más robusto sin depender de session_state
+    try:
+        # Limpiar trabajos anteriores
+        schedule.clear()
         
         # Configurar actualización a las 2:00 AM
         schedule.every().day.at("02:00").do(auto_update_from_sftp)
         
-        # Iniciar worker en hilo separado
-        worker_thread = threading.Thread(target=schedule_worker, daemon=True)
-        worker_thread.start()
+        # Log para confirmar configuración
+        log_message("⚙️ Scheduler configurado para actualizaciones a las 02:00 AM")
+        
+        # Verificar si ya hay un worker ejecutándose
+        active_threads = [t for t in threading.enumerate() if t.name.startswith('scheduler_worker')]
+        
+        if not active_threads:
+            # Iniciar worker en hilo separado con nombre específico
+            worker_thread = threading.Thread(
+                target=schedule_worker, 
+                daemon=True,
+                name='scheduler_worker_main'
+            )
+            worker_thread.start()
+            log_message("✅ Worker de scheduler iniciado correctamente")
+        else:
+            log_message("ℹ️ Worker de scheduler ya está ejecutándose")
+            
+    except Exception as e:
+        log_message(f"💥 Error inicializando scheduler: {str(e)}")
+
+def get_scheduler_status():
+    """Obtener estado del scheduler y próxima ejecución"""
+    try:
+        next_run = schedule.next_run()
+        if next_run:
+            return f"Próxima ejecución: {next_run.strftime('%Y-%m-%d %H:%M:%S')}"
+        else:
+            return "Sin tareas programadas"
+    except:
+        return "Estado desconocido"
+
+def get_recent_logs():
+    """Obtener los últimos logs del scheduler"""
+    try:
+        if os.path.exists("data/scheduler.log"):
+            with open("data/scheduler.log", "r", encoding="utf-8") as f:
+                lines = f.readlines()
+                # Retornar las últimas 10 líneas
+                return "".join(lines[-10:]) if lines else "Sin logs disponibles"
+        return "Archivo de log no encontrado"
+    except Exception as e:
+        return f"Error leyendo logs: {str(e)}"
 
 def main():
     """Función principal de la aplicación"""
@@ -571,9 +647,26 @@ def main():
                 
                 # Estado de las actualizaciones automáticas
                 if st.session_state.sftp_config['enabled']:
-                    st.info("🤖 Actualizaciones automáticas: HABILITADAS (2:00 AM diario)")
+                    st.success("🤖 Actualizaciones automáticas: HABILITADAS (2:00 AM diario)")
                     if 'last_update' in st.session_state:
                         st.info(f"📅 Última actualización: {st.session_state.last_update}")
+                    
+                    # Información del scheduler
+                    scheduler_status = get_scheduler_status()
+                    st.info(f"⏰ {scheduler_status}")
+                    
+                    # Mostrar logs recientes
+                    if st.button("📋 Ver Logs del Scheduler", key="view_logs"):
+                        with st.expander("📝 Logs Recientes del Sistema", expanded=True):
+                            logs = get_recent_logs()
+                            st.text_area("Logs:", value=logs, height=200, disabled=True)
+                    
+                    # Botón para probar ahora (útil para debugging)
+                    if st.button("🧪 Probar Actualización Automática", key="test_auto_update"):
+                        with st.spinner("Ejecutando prueba de actualización automática..."):
+                            auto_update_from_sftp()
+                            st.success("Prueba completada. Revisa los logs para detalles.")
+                            st.rerun()
                 else:
                     st.warning("⚠️ Actualizaciones automáticas: DESHABILITADAS")
             
