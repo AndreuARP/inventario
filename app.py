@@ -427,15 +427,36 @@ def schedule_worker():
     """Worker que ejecuta las tareas programadas"""
     log_message("🚀 Scheduler worker iniciado - próxima ejecución: 02:00 AM")
     
+    # Crear archivo de estado para tracking
+    status_file = "data/scheduler_status.json"
+    
     while True:
         try:
+            current_time = datetime.now()
+            
+            # Actualizar archivo de estado cada minuto
+            status_data = {
+                "last_check": current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                "worker_active": True,
+                "next_run": schedule.next_run().strftime("%Y-%m-%d %H:%M:%S") if schedule.next_run() else None
+            }
+            
+            try:
+                with open(status_file, "w", encoding="utf-8") as f:
+                    json.dump(status_data, f, indent=2)
+            except:
+                pass  # No fallar si no se puede escribir el estado
+            
             # Ejecutar tareas pendientes
             schedule.run_pending()
             
-            # Log del estado cada hora para verificar que está funcionando
-            current_hour = datetime.now().hour
-            if current_hour == 0:  # Medianoche
-                log_message("⏰ Scheduler activo - próxima actualización en 2 horas")
+            # Log del estado cada 6 horas para verificar que está funcionando
+            if current_time.hour in [0, 6, 12, 18] and current_time.minute == 0:
+                log_message(f"⏰ Scheduler activo a las {current_time.strftime('%H:%M')} - próxima ejecución: {schedule.next_run()}")
+            
+            # Si estamos cerca de las 2:00 AM, hacer log más frecuente
+            if current_time.hour == 1 and current_time.minute >= 55:
+                log_message(f"🕐 Preparándose para actualización automática en {60 - current_time.minute} minutos")
             
             time.sleep(60)  # Revisar cada minuto
             
@@ -477,13 +498,43 @@ def initialize_auto_scheduler():
 def get_scheduler_status():
     """Obtener estado del scheduler y próxima ejecución"""
     try:
+        status_info = []
+        
+        # Información básica del scheduler
         next_run = schedule.next_run()
         if next_run:
-            return f"Próxima ejecución: {next_run.strftime('%Y-%m-%d %H:%M:%S')}"
+            status_info.append(f"Próxima ejecución: {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
         else:
-            return "Sin tareas programadas"
-    except:
-        return "Estado desconocido"
+            status_info.append("Sin tareas programadas")
+        
+        # Verificar archivo de estado del worker
+        status_file = "data/scheduler_status.json"
+        if os.path.exists(status_file):
+            try:
+                with open(status_file, "r", encoding="utf-8") as f:
+                    worker_status = json.load(f)
+                
+                last_check = datetime.strptime(worker_status["last_check"], "%Y-%m-%d %H:%M:%S")
+                minutes_ago = (datetime.now() - last_check).total_seconds() / 60
+                
+                if minutes_ago < 5:
+                    status_info.append(f"Worker activo (último check hace {int(minutes_ago)} min)")
+                else:
+                    status_info.append(f"⚠️ Worker inactivo (último check hace {int(minutes_ago)} min)")
+                    
+            except:
+                status_info.append("Estado del worker desconocido")
+        else:
+            status_info.append("Archivo de estado no encontrado")
+        
+        # Verificar threads activos
+        active_threads = [t for t in threading.enumerate() if 'scheduler_worker' in t.name]
+        status_info.append(f"Threads del scheduler: {len(active_threads)}")
+        
+        return " | ".join(status_info)
+        
+    except Exception as e:
+        return f"Error obteniendo estado: {str(e)}"
 
 def get_recent_logs():
     """Obtener los últimos logs del scheduler"""
@@ -655,18 +706,32 @@ def main():
                     scheduler_status = get_scheduler_status()
                     st.info(f"⏰ {scheduler_status}")
                     
-                    # Mostrar logs recientes
-                    if st.button("📋 Ver Logs del Scheduler", key="view_logs"):
-                        with st.expander("📝 Logs Recientes del Sistema", expanded=True):
-                            logs = get_recent_logs()
-                            st.text_area("Logs:", value=logs, height=200, disabled=True)
+                    # Botones de control
+                    col_logs, col_test, col_restart = st.columns(3)
                     
-                    # Botón para probar ahora (útil para debugging)
-                    if st.button("🧪 Probar Actualización Automática", key="test_auto_update"):
-                        with st.spinner("Ejecutando prueba de actualización automática..."):
-                            auto_update_from_sftp()
-                            st.success("Prueba completada. Revisa los logs para detalles.")
-                            st.rerun()
+                    with col_logs:
+                        if st.button("📋 Ver Logs", key="view_logs"):
+                            with st.expander("📝 Logs Recientes del Sistema", expanded=True):
+                                logs = get_recent_logs()
+                                st.text_area("Logs:", value=logs, height=200, disabled=True)
+                    
+                    with col_test:
+                        if st.button("🧪 Probar Ahora", key="test_auto_update"):
+                            with st.spinner("Ejecutando prueba..."):
+                                auto_update_from_sftp()
+                                st.success("Prueba completada")
+                                st.rerun()
+                    
+                    with col_restart:
+                        if st.button("🔄 Reiniciar Scheduler", key="restart_scheduler"):
+                            with st.spinner("Reiniciando scheduler..."):
+                                initialize_auto_scheduler()
+                                st.success("Scheduler reiniciado")
+                                st.rerun()
+                    
+                    # Advertencia si el worker parece inactivo
+                    if "Worker inactivo" in scheduler_status:
+                        st.warning("⚠️ El scheduler parece estar inactivo. Considera reiniciarlo.")
                 else:
                     st.warning("⚠️ Actualizaciones automáticas: DESHABILITADAS")
             

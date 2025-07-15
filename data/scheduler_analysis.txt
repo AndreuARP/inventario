@@ -1,0 +1,35 @@
+ANÁLISIS DEL PROBLEMA DEL SCHEDULER AUTOMÁTICO
+================================================
+
+PROBLEMA IDENTIFICADO:
+La aplicación Streamlit se reinició el 15 de julio a las 13:50 PM, perdiendo el worker del scheduler que estaba programado para ejecutarse a las 2:00 AM.
+
+CAUSA RAÍZ:
+- Replit puede reiniciar aplicaciones por inactividad o mantenimiento
+- Los threads de Python (como el scheduler worker) se ejecutan en memoria
+- Cuando la aplicación se reinicia, todos los threads se pierden
+- El scheduler se vuelve a configurar, pero el worker anterior ya no existe
+
+EVIDENCIA EN LOGS:
+- Última configuración exitosa: 2025-07-14 17:11:45
+- Reinicio detectado: 2025-07-15 13:50:54
+- NO hay logs de ejecución a las 2:00 AM del 15 de julio
+
+SOLUCIONES IMPLEMENTADAS:
+1. Mejorado el sistema de logging con timestamps detallados
+2. Archivo de estado para monitorear actividad del worker
+3. Logs cada 6 horas para verificar que está activo  
+4. Botón de reinicio manual del scheduler
+5. Detección automática de workers inactivos
+6. Logs previos a las 2:00 AM para confirmar preparación
+
+RECOMENDACIONES:
+1. Monitorear los logs diariamente
+2. Usar el botón "Reiniciar Scheduler" si se detecta inactividad
+3. Considerar usar un servicio externo de cron jobs para mayor confiabilidad
+4. En producción, usar Replit Always On para evitar reinicios por inactividad
+
+PRÓXIMOS PASOS:
+- El scheduler está ahora configurado para ejecutarse el 16 de julio a las 2:00 AM
+- Se puede probar manualmente con el botón "Probar Ahora"
+- El sistema alertará si detecta que el worker está inactivo
