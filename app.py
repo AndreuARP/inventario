@@ -464,10 +464,41 @@ def schedule_worker():
             log_message(f"💥 Error en scheduler worker: {str(e)}")
             time.sleep(300)  # Esperar 5 minutos antes de reintentar
 
+def check_missed_updates():
+    """Verificar si se perdieron actualizaciones y ejecutarlas si es necesario"""
+    try:
+        config = load_config()
+        last_update_str = config.get('last_update', '')
+        now = datetime.now()
+        
+        if last_update_str:
+            last_update = datetime.strptime(last_update_str, "%Y-%m-%d %H:%M:%S")
+            
+            # Si la última actualización fue hace más de 20 horas, probablemente se perdió una
+            hours_since_last = (now - last_update).total_seconds() / 3600
+            
+            if hours_since_last > 20:  # Más de 20 horas
+                log_message(f"🔍 Última actualización hace {hours_since_last:.1f} horas. Ejecutando actualización de recuperación...")
+                auto_update_from_sftp()
+                return True
+        else:
+            # Si no hay registro de última actualización, ejecutar una
+            log_message("🔍 No hay registro de actualizaciones previas. Ejecutando primera actualización...")
+            auto_update_from_sftp()
+            return True
+                        
+        return False
+    except Exception as e:
+        log_message(f"💥 Error verificando actualizaciones perdidas: {str(e)}")
+        return False
+
 def initialize_auto_scheduler():
     """Inicializar el programador automático al cargar la aplicación"""
     # Usar un enfoque más robusto sin depender de session_state
     try:
+        # Primero verificar si hay actualizaciones perdidas
+        check_missed_updates()
+        
         # Limpiar trabajos anteriores
         schedule.clear()
         

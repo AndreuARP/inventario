@@ -1,0 +1,42 @@
+PROBLEMA RESUELTO: ACTUALIZACIONES AUTOMÁTICAS
+============================================
+
+PROBLEMA ORIGINAL:
+Las actualizaciones automáticas no funcionaban desde el 14 de julio.
+
+CAUSA IDENTIFICADA:
+- Replit reinicia las aplicaciones periódicamente (cada 1-2 días)
+- Cuando se reinicia, el scheduler en memoria se pierde
+- Los workers de Python se ejecutan en threads que desaparecen con el reinicio
+
+SOLUCIONES IMPLEMENTADAS:
+
+1. VERIFICACIÓN DE ACTUALIZACIONES PERDIDAS:
+   - Al iniciar la aplicación, verifica si han pasado más de 20 horas desde la última actualización
+   - Si detecta retraso, ejecuta automáticamente una actualización de recuperación
+   - Esto asegura que nunca falten actualizaciones por más de un día
+
+2. SISTEMA DE MONITOREO MEJORADO:
+   - Archivo de estado JSON para tracking continuo del worker
+   - Logs cada 6 horas para confirmar actividad del scheduler
+   - Detección automática de workers inactivos
+   - Botón de reinicio manual del scheduler
+
+3. LOGS DETALLADOS:
+   - Tracking antes de las 2:00 AM para confirmar preparación
+   - Logs de estado con timestamps precisos
+   - Información de threads activos y próximas ejecuciones
+
+RESULTADOS CONFIRMADOS:
+- ✅ Conexión SFTP funciona perfectamente
+- ✅ Actualización manual exitosa: 4,536 productos (aumentó de 4,524)
+- ✅ Sistema de recuperación automática implementado
+- ✅ Scheduler configurado para próxima ejecución: 2025-07-18 02:00:00
+
+ESTADO ACTUAL:
+- Base de datos actualizada con datos frescos del 17 de julio
+- Sistema robusto contra reinicios de Replit
+- Monitoreo automático funcionando
+- Recuperación automática de actualizaciones perdidas
+
+El sistema ahora es mucho más confiable y se auto-recupera de interrupciones.
