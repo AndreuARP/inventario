@@ -132,33 +132,7 @@ st.markdown("""
 # Constantes
 PASSWORD = "stock2025"
 CSV_FILE_PATH = "data/productos.csv"
-if not os.path.exists("data"):
-    os.makedirs("data")
-
-if not os.path.exists(CSV_FILE_PATH):
-    st.info("Descargando archivo de stock desde SFTP...")
-
-    # Sustituye esto con tus valores reales
-    SFTP_HOST = "home567855122.1and1-data.host"
-    SFTP_USER = "acc1195143440"
-    SFTP_PASS = "@Q&jb@kpcU(OhpQv95bN0%eI"
-    SFTP_PATH = "/stock/stock.csv"
-
-    success, content, msg = download_from_sftp(
-        sftp_host=SFTP_HOST,
-        sftp_user=SFTP_USER,
-        sftp_password=SFTP_PASS,
-        sftp_file_path=SFTP_PATH
-    )
-
-    if success:
-        with open(CSV_FILE_PATH, "w", encoding="utf-8") as f:
-            f.write(content)
-        st.success("Archivo descargado correctamente.")
-    else:
-        st.error(f"No se pudo descargar el archivo: {msg}")
 CONFIG_FILE_PATH = "data/config.json"
-
 
 def check_password():
     """Función para verificar la contraseña de acceso"""
