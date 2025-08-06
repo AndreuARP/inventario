@@ -4,6 +4,8 @@
 
 This is a Streamlit-based stock consultation system for Distribuciones Lucero that provides a web interface for managing and querying product inventory. The application features dual-access authentication, automatic SFTP updates, and corporate branding with persistent configuration management.
 
+**Recent Update (2025-08-06):** Application has been fully adapted for Railway deployment with optimized configuration files, error handling improvements, and a streamlined version (`app_railway.py`) specifically designed for cloud hosting environments.
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.

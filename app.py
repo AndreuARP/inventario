@@ -464,7 +464,7 @@ def schedule_worker():
             status_data = {
                 "last_check": current_time.strftime("%Y-%m-%d %H:%M:%S"),
                 "worker_active": True,
-                "next_run": schedule.next_run().strftime("%Y-%m-%d %H:%M:%S") if schedule.next_run() else None
+                "next_run": schedule.next_run().strftime("%Y-%m-%d %H:%M:%S") if schedule.next_run() is not None else None
             }
             
             try:
@@ -842,7 +842,7 @@ def main():
             high_threshold = st.session_state.get('stock_high_threshold', 20)
             
             # Calcular stocks por categorías
-            stock_numbers = pd.to_numeric(df['Stock'], errors='coerce')
+            stock_numbers = pd.to_numeric(df['Stock'], errors='coerce').fillna(0)
             stock_bajo = len(df[stock_numbers <= low_threshold])
             stock_medio = len(df[(stock_numbers > low_threshold) & (stock_numbers <= high_threshold)])
             stock_alto = len(df[stock_numbers > high_threshold])
@@ -912,7 +912,7 @@ def main():
         
         # Preparar datos para mostrar
         display_df = filtered_df.copy()
-        display_df['Indicador'] = display_df['Stock'].apply(get_stock_color)
+        display_df['Indicador'] = filtered_df['Stock'].apply(get_stock_color)
         display_df = display_df[['Indicador', 'Codigo', 'Descripcion', 'Familia', 'Stock']]
         
         # Mostrar tabla

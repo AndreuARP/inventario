@@ -1,0 +1,15 @@
+[phases.setup]
+nixPkgs = ['python311', 'python311Packages.pip']
+
+[phases.install]
+cmds = [
+  'pip install --upgrade pip',
+  'pip install streamlit>=1.46.1',
+  'pip install pandas>=2.3.1',
+  'pip install paramiko>=3.5.1',
+  'pip install schedule>=1.2.2',
+  'pip install requests>=2.31.0'
+]
+
+[start]
+cmd = 'python railway_app.py'
