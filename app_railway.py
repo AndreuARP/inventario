@@ -12,6 +12,13 @@ import requests
 from datetime import datetime
 import json
 
+# Importar scheduler para Railway
+try:
+    from scheduler_railway import start_railway_scheduler
+    SCHEDULER_AVAILABLE = True
+except ImportError:
+    SCHEDULER_AVAILABLE = False
+
 # Configuración optimizada para Railway
 st.set_page_config(
     page_title="Distribuciones Lucero - Sistema de Stock",
@@ -329,4 +336,8 @@ def main():
         """)
 
 if __name__ == "__main__":
+    # Inicializar scheduler si está habilitado
+    if SCHEDULER_AVAILABLE:
+        start_railway_scheduler()
+    
     main()
