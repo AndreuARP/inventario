@@ -79,6 +79,11 @@ UPDATE_SCHEDULE_TIME=02:00
 ### Si hay errores de build:
 Ver `RAILWAY_TROUBLESHOOT.md` para soluciones
 
+### Control manual de actualizaciones:
+- Botón "Forzar Actualización" en app (admin)
+- Script: `python manual_update.py update`
+- Ver `MANUAL_UPDATE.md` para detalles
+
 ### Salud del servicio:
 - Health check en ruta principal `/`
 - Restart policy configurado

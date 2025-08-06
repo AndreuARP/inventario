@@ -214,6 +214,21 @@ def main():
         user_type = st.session_state.get('user_type', 'viewer')
         st.success(f"👤 Usuario: **{user_type.title()}**")
         
+        # Botón para forzar actualización (solo admin)
+        if user_type == "admin":
+            st.markdown("### 🔄 Control Manual")
+            if st.button("⚡ Forzar Actualización", key="force_update", help="Ejecutar actualización SFTP inmediatamente"):
+                with st.spinner("Ejecutando actualización..."):
+                    try:
+                        # Importar y ejecutar actualización manual
+                        from scheduler_railway import run_scheduled_update
+                        run_scheduled_update()
+                        st.success("✅ Actualización ejecutada!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
+                        st.info("Verifica que SFTP esté configurado correctamente")
+        
         if IS_RAILWAY:
             st.info(f"🚀 Railway - Puerto {PORT}")
             
