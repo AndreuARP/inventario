@@ -216,6 +216,39 @@ def main():
         
         if IS_RAILWAY:
             st.info(f"🚀 Railway - Puerto {PORT}")
+            
+            # Panel de estado del scheduler
+            st.markdown("### ⏰ Estado Actualizaciones")
+            scheduler_enabled = os.environ.get("ENABLE_SCHEDULER", "false").lower() == "true"
+            if scheduler_enabled:
+                st.success("Scheduler: Activo")
+                schedule_time = os.environ.get("UPDATE_SCHEDULE_TIME", "02:00")
+                st.text(f"Próxima: {schedule_time}")
+            else:
+                st.warning("Scheduler: Deshabilitado")
+            
+            # Mostrar última actualización
+            try:
+                if os.path.exists("data/config.json"):
+                    with open("data/config.json", 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                        last_update = config.get('last_update')
+                        if last_update:
+                            st.success("✅ Última actualización:")
+                            st.text(last_update)
+                            
+                            # Calcular tiempo transcurrido
+                            try:
+                                last_dt = datetime.strptime(last_update, "%Y-%m-%d %H:%M:%S")
+                                now = datetime.now()
+                                hours_ago = (now - last_dt).total_seconds() / 3600
+                                st.caption(f"Hace {hours_ago:.1f} horas")
+                            except:
+                                pass
+                        else:
+                            st.info("⏳ Sin actualizaciones")
+            except:
+                st.info("⏳ Configuración inicial")
         
         if st.button("🚪 Cerrar Sesión", key="logout"):
             st.session_state.password_correct = False
