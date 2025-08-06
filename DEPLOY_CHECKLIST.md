@@ -68,8 +68,16 @@ UPDATE_SCHEDULE_TIME=02:00
 
 ### Detección automática:
 - Port: Variable `$PORT` (dinámico)
-- Build: Nixpacks detectará Python automáticamente
+- Build: Dockerfile (recomendado) o Nixpacks
 - Start: `python railway_app.py`
+
+### Archivos de build disponibles:
+- `Dockerfile` - Build con Docker (más estable)
+- `nixpacks.toml` - Build con Nixpacks
+- `railway_requirements.txt` - Dependencies backup
+
+### Si hay errores de build:
+Ver `RAILWAY_TROUBLESHOOT.md` para soluciones
 
 ### Salud del servicio:
 - Health check en ruta principal `/`
